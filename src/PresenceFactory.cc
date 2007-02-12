@@ -15,7 +15,7 @@ namespace edm {
   }
 
   PresenceFactory::PresenceFactory(): 
-    seal::PluginFactory<PresenceFunc>("CMS EDM Framework Presence") {
+    edmplugin::PluginFactory<PresenceFunc>("CMS EDM Framework Presence") {
   }
 
   PresenceFactory PresenceFactory::singleInstance_;

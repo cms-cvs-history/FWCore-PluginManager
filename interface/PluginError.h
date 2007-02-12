@@ -1,9 +1,10 @@
-#ifndef PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
-# define PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#ifndef PLUGIN_MANAGER_PLUGIN_ERROR_H
+# define PLUGIN_MANAGER_PLUGIN_ERROR_H
 
 //<<<<<< INCLUDES                                                       >>>>>>
 
-# include "FWCore/PluginManager/interface/PluginFactory.h"
+# include "FWCore/PluginManager/interface/config.h"
+# include "FWCore/Utilities/interface/Exception.h"
 
 namespace edmplugin {
 //<<<<<< PUBLIC DEFINES                                                 >>>>>>
@@ -13,18 +14,18 @@ namespace edmplugin {
 //<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
 //<<<<<< CLASS DECLARATIONS                                             >>>>>>
 
-class PluginCapabilities : public PluginFactory<void>
+/** Error object for the plug-in manager.  All lower-level errors
+    are chained to this type before being passed upwards.  */
+  class PluginError : public cms::Exception
 {
 public:
-    static PluginCapabilities *get (void);
-
-private:
-    PluginCapabilities (void);
-    static PluginCapabilities s_instance;
+  PluginError (const std::string& iMessage): cms::Exception("PluginError",iMessage) {}
+  PluginError(const std::string& iMessage,
+              const cms::Exception& iOther): cms::Exception("PluginError",iMessage,iOther) {}
 };
 
 //<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
 //<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
 
 } // namespace edmplugin
-#endif // PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#endif // PLUGIN_MANAGER_PLUGIN_ERROR_H

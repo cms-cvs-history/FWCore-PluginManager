@@ -1,0 +1,5 @@
+<bin name=EdmPluginDump file=dump.cc>
+ <use name=boost>
+ <use name=FWCore/MessageService>
+ <use name=FWCore/PluginManager>
+</bin>

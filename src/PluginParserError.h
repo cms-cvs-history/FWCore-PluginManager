@@ -1,10 +1,11 @@
-#ifndef PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
-# define PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#ifndef PLUGIN_MANAGER_PLUGIN_PARSER_ERROR_H
+# define PLUGIN_MANAGER_PLUGIN_PARSER_ERROR_H
 
 //<<<<<< INCLUDES                                                       >>>>>>
 
-# include "FWCore/PluginManager/interface/PluginFactory.h"
-
+//# include "FWCore/PluginManager/interface/config.h"
+# //include "FWCore/PluginManager/interface/Error.h"
+#include "FWCore/Utilities/interface/Exception.h"
 namespace edmplugin {
 //<<<<<< PUBLIC DEFINES                                                 >>>>>>
 //<<<<<< PUBLIC CONSTANTS                                               >>>>>>
@@ -13,18 +14,24 @@ namespace edmplugin {
 //<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
 //<<<<<< CLASS DECLARATIONS                                             >>>>>>
 
-class PluginCapabilities : public PluginFactory<void>
+  class  PluginParserError : public cms::Exception
 {
 public:
-    static PluginCapabilities *get (void);
+    PluginParserError (const std::string &reason);
+    // implicit copy constructor
+    // implicit assignment operator
+    // implicit destructor
 
-private:
-    PluginCapabilities (void);
-    static PluginCapabilities s_instance;
+//    virtual std::string	explainSelf (void) const;
+//    virtual Error *	clone (void) const;
+//    virtual void	rethrow (void);
+
+//private:
+//    std::string		m_reason;
 };
 
 //<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
 //<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
 
 } // namespace edmplugin
-#endif // PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#endif // PLUGIN_MANAGER_PLUGIN_PARSER_ERROR_H

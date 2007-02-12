@@ -1,9 +1,10 @@
-#ifndef PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
-# define PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#ifndef PLUGIN_MANAGER_DEBUG_H
+# define PLUGIN_MANAGER_DEBUG_H
 
 //<<<<<< INCLUDES                                                       >>>>>>
 
-# include "FWCore/PluginManager/interface/PluginFactory.h"
+# include "FWCore/PluginManager/interface/config.h"
+# include "FWCore/PluginManager/interface/Log.h"
 
 namespace edmplugin {
 //<<<<<< PUBLIC DEFINES                                                 >>>>>>
@@ -13,18 +14,10 @@ namespace edmplugin {
 //<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
 //<<<<<< CLASS DECLARATIONS                                             >>>>>>
 
-class PluginCapabilities : public PluginFactory<void>
-{
-public:
-    static PluginCapabilities *get (void);
-
-private:
-    PluginCapabilities (void);
-    static PluginCapabilities s_instance;
-};
+//PLUGIN_MANAGER_API extern logflag LFplugin_manager;
 
 //<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
 //<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
 
 } // namespace edmplugin
-#endif // PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#endif // PLUGIN_MANAGER_DEBUG_H

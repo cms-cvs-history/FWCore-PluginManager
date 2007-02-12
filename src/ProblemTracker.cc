@@ -3,7 +3,7 @@
 #include "FWCore/PluginManager/interface/ProblemTracker.h"
 #include "FWCore/Utilities/interface/EDMException.h"
 
-#include "SealBase/Error.h"
+//#include "SealBase/Error.h"
 
 #include <iostream>
 #include <string>
@@ -11,10 +11,10 @@
 using namespace std;
 
 // return true if this is status, false if it is error
-static bool codeToName(seal::PluginManager::FeedbackCode code, 
+static bool codeToName(edmplugin::PluginManager::FeedbackCode code, 
 		       string& error_name)
 {
-  using namespace seal;
+  using namespace edmplugin;
   bool rc = true;
 
   switch(code)
@@ -51,11 +51,11 @@ static bool codeToName(seal::PluginManager::FeedbackCode code,
 namespace edm
 {
 
-  void ProblemTracker::feedback(seal::PluginManager::FeedbackData data)
+  void ProblemTracker::feedback(edmplugin::PluginManager::FeedbackData data)
   {
     if(dead_==true) return;
 
-    using namespace seal;
+    using namespace edmplugin;
     ProblemTracker* prob = ProblemTracker::instance();
     string name;
     bool is_status = codeToName(data.code,name);
@@ -71,7 +71,7 @@ namespace edm
       {
 	// an exception object is here
 	cerr << "The PluginManager has reported an exceptional condition.\n"
-	     << "Message:\n" << data.error->explain()
+	     << "Message:\n" << data.error->what()
 	     << endl;
       }
 
@@ -94,8 +94,8 @@ namespace edm
 
   char ProblemTracker::failure(const char* msg)
   {
-    if(dead_==true)
-      if(old_assert_hook_) return old_assert_hook_(msg);
+    if(dead_==true) return 'a';
+      //if(old_assert_hook_) return old_assert_hook_(msg);
 
     ProblemTracker* prob = ProblemTracker::instance();
     cerr << "Got Assertion: message = " << msg << "\n"
@@ -110,7 +110,7 @@ namespace edm
   // -----------------------------------------------
 
   bool ProblemTracker::dead_ = true;
-  seal::DebugAids::AssertHook ProblemTracker::old_assert_hook_ = 0;
+  //edmplugin::DebugAids::AssertHook ProblemTracker::old_assert_hook_ = 0;
 
   ProblemTracker::ProblemTracker():
     last_scope_("Unknown"),
@@ -118,10 +118,10 @@ namespace edm
     last_error_("NoError")
   {
     dead_ = false;
-    old_assert_hook_ = seal::DebugAids::failHook(&failure);
+    //old_assert_hook_ = edmplugin::DebugAids::failHook(&failure);
 
-    seal::PluginManager* db = seal::PluginManager::get();
-    db->addFeedback(seal::CreateCallback(&feedback));
+    edmplugin::PluginManager* db = edmplugin::PluginManager::get();
+    db->addFeedback(&feedback);
     db->initialise();
   }
 

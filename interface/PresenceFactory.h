@@ -12,7 +12,7 @@ namespace edm {
   typedef Presence* (PresenceFunc)();
 
   class PresenceFactory :
-    public seal::PluginFactory<PresenceFunc> {
+    public edmplugin::PluginFactory<PresenceFunc> {
   public:
     ~PresenceFactory();
 

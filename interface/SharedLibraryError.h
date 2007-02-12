@@ -1,9 +1,9 @@
-#ifndef PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
-# define PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#ifndef SEAL_BASE_SHARED_LIBRARY_ERROR_H
+# define SEAL_BASE_SHARED_LIBRARY_ERROR_H
 
 //<<<<<< INCLUDES                                                       >>>>>>
 
-# include "FWCore/PluginManager/interface/PluginFactory.h"
+# include "FWCore/Utilities/interface/Exception.h"
 
 namespace edmplugin {
 //<<<<<< PUBLIC DEFINES                                                 >>>>>>
@@ -13,18 +13,16 @@ namespace edmplugin {
 //<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
 //<<<<<< CLASS DECLARATIONS                                             >>>>>>
 
-class PluginCapabilities : public PluginFactory<void>
+/** Error in a shared library operation. */
+  class SharedLibraryError : public cms::Exception
 {
 public:
-    static PluginCapabilities *get (void);
-
-private:
-    PluginCapabilities (void);
-    static PluginCapabilities s_instance;
+  SharedLibraryError(const std::string& iCategory):
+  cms::Exception(iCategory) {}
 };
 
 //<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
 //<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
 
 } // namespace edmplugin
-#endif // PLUGIN_MANAGER_PLUGIN_CAPABILITIES_H
+#endif // SEAL_BASE_SHARED_LIBRARY_ERROR_H
