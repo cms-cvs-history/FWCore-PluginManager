@@ -76,7 +76,7 @@ public:
     /// Iterator over #Module objects in this cache
     typedef ModuleList::const_iterator		Iterator;
   
-    ModuleCache (PluginManager *manager, const Filename &directory);
+    ModuleCache (PluginManager *manager, const Filename &directory, bool doUpdate=true);
     ~ModuleCache (void);
 
     // cache definition
@@ -84,7 +84,7 @@ public:
     Filename		directory (void) const;
 
     // cache management
-    void		refresh (void);
+    void		refresh (bool doUpdate=true);
 
     // module access
     Iterator		begin (void) const;
@@ -92,7 +92,7 @@ public:
 
 protected:
     void		load (void);
-    void		rebuild (void);
+    void		rebuild (bool doUpdate=true);
     void		notify (void);
     void		update (void);
 
@@ -139,7 +139,7 @@ private:
 			       ModuleDescriptor *root = 0);
     static ModuleDescriptor *makeBad (const std::string &file,
 		    		      const std::string &time);
-    CacheStatus		scanModules (RegList &cache);
+    CacheStatus		scanModules (RegList &cache, bool doUpdate=true);
     void		reconstruct (ModuleDescriptor *info);
     void		write (std::ostream &s,
 			       ModuleDescriptor *doc,
