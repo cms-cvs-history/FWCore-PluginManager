@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <boost/bind.hpp>
 
 using namespace std;
 
@@ -56,7 +57,7 @@ namespace edm
     if(dead_==true) return;
 
     using namespace edmplugin;
-    ProblemTracker* prob = ProblemTracker::instance();
+    ProblemTracker* prob = this;
     string name;
     bool is_status = codeToName(data.code,name);
 
@@ -119,10 +120,29 @@ namespace edm
   {
     dead_ = false;
     //old_assert_hook_ = edmplugin::DebugAids::failHook(&failure);
+    edmplugin::PluginManager::Config config;
 
-    edmplugin::PluginManager* db = edmplugin::PluginManager::get();
-    db->addFeedback(&feedback);
-    db->initialise();
+    //const char *path = getenv ("SEAL_PLUGINS");
+    const char *path = getenv ("EDM_PLUGINS");
+    if (! path) path = "";
+    //LOG (0, trace, LFplugin_manager,
+    //    "initialising plugin manager with path <" << path << ">");
+    
+    std::string spath(path? path: "");
+    std::string::size_type last=0;
+    std::string::size_type i=0;
+    std::vector<std::string> paths;
+    while( (i=spath.find_first_of(':',last))!=std::string::npos) {
+      paths.push_back(spath.substr(last,i-last));
+      last = i+1;
+      std::cout <<paths.back()<<std::endl;
+    }
+    paths.push_back(spath.substr(last,std::string::npos));
+    config.searchPath(paths);
+    
+    edmplugin::PluginManager& db = edmplugin::PluginManager::configure(config);
+    db.addFeedback(boost::bind(boost::mem_fn(&ProblemTracker::feedback),this,_1));
+    db.initialise();
   }
 
   ProblemTracker::~ProblemTracker()
