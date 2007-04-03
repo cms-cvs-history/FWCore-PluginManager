@@ -499,7 +499,8 @@ PluginFactoryImplBase<Types>::PluginFactoryImplBase (const std::string &tag)
     : PluginFactoryBase (tag)
 {
     ASSERT (! tag.empty ());
-    rebuild ();
+    finishedConstruction();
+    //rebuild ();
 }
 
 /** Destroy the factory.  */
