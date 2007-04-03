@@ -23,7 +23,7 @@ namespace edm {
 
   private:
     PresenceFactory();
-    static PresenceFactory singleInstance_;
+    //static PresenceFactory singleInstance_;
   };
 }
 #endif // FWCore_PluginManager_PresenceFactory_h

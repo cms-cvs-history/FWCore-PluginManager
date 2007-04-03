@@ -18,9 +18,9 @@ namespace edm {
     edmplugin::PluginFactory<PresenceFunc>("CMS EDM Framework Presence") {
   }
 
-  PresenceFactory PresenceFactory::singleInstance_;
 
   PresenceFactory* PresenceFactory::get() {
+    static PresenceFactory singleInstance_;
     return &singleInstance_;
   }
 
