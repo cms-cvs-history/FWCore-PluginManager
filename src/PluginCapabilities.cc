@@ -10,7 +10,6 @@ namespace edmplugin {
 //<<<<<< PUBLIC VARIABLE DEFINITIONS                                    >>>>>>
 //<<<<<< CLASS STRUCTURE INITIALIZATION                                 >>>>>>
 
-PluginCapabilities PluginCapabilities::s_instance;
 
 //<<<<<< PRIVATE FUNCTION DEFINITIONS                                   >>>>>>
 //<<<<<< PUBLIC FUNCTION DEFINITIONS                                    >>>>>>
@@ -22,6 +21,7 @@ PluginCapabilities::PluginCapabilities (void)
 
 PluginCapabilities *
 PluginCapabilities::get (void)
-{ return &s_instance; }
+{ static PluginCapabilities s_instance;
+  return &s_instance; }
 
 } // namespace edmplugin

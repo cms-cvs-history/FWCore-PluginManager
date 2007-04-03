@@ -20,7 +20,7 @@ public:
 
 private:
     PluginCapabilities (void);
-    static PluginCapabilities s_instance;
+    //static PluginCapabilities s_instance;
 };
 
 //<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
