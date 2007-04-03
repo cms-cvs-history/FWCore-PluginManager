@@ -1,6 +1,7 @@
 //<<<<<< INCLUDES                                                       >>>>>>
 
 #include "FWCore/PluginManager/interface/PluginManager.h"
+#include "FWCore/PluginManager/interface/PluginFactoryManager.h"
 #include "FWCore/PluginManager/interface/PluginInfo.h"
 #include "FWCore/PluginManager/interface/PluginFactoryBase.h"
 #include "FWCore/PluginManager/interface/ModuleCache.h"
@@ -13,6 +14,7 @@
 #include <functional>
 #include <typeinfo>
 #include <iostream>
+#include <boost/bind.hpp>
 
 #include "FWCore/Utilities/interface/Exception.h"
 //#define CDJ_NO_COMPILE
@@ -66,6 +68,27 @@ static PluginManagerDestructor s_destructor;
 //<<<<<< PUBLIC FUNCTION DEFINITIONS                                    >>>>>>
 //<<<<<< MEMBER FUNCTION DEFINITIONS                                    >>>>>>
 
+PluginManager*& 
+PluginManager::singleton() {
+  static PluginManager* s_db = 0;
+  return s_db;
+}
+
+PluginManager&
+PluginManager::configure(const Config& iConfig ) {
+  PluginManager*& s = singleton();
+  if( 0 != s ){
+    throw cms::Exception("PluginManagerReconfigured");
+  }
+
+  Config realConfig = iConfig;
+  if (realConfig.searchPath().empty() ) {
+    throw cms::Exception("PluginManagerEmptySearchPath");
+  }
+  s = new PluginManager (realConfig);
+  s_destructor.object (s);
+  return *s;
+}
 /** Get the plug-in manager.  This retrieves a pointer to a global
     plug-in manager object.  The manager is automatically created on
     first call to this function, and initialised to use @c SEAL_PLUGINS
@@ -77,31 +100,11 @@ static PluginManagerDestructor s_destructor;
 PluginManager *
 PluginManager::get (void)
 {
-    // FIXME: Thread safety
-    static PluginManager           *s_db = 0;
-  /* CDJ */
-    if (! s_db)
-    {
-	const char *path = getenv ("SEAL_PLUGINS");
-	if (! path) path = "";
-	//LOG (0, trace, LFplugin_manager,
-	 //    "initialising plugin manager with path <" << path << ">");
-
-        std::string spath(path? path: "");
-        std::string::size_type last=0;
-        std::string::size_type i=0;
-        std::vector<std::string> paths;
-        while( (i=spath.find_first_of(':',last))!=std::string::npos) {
-          paths.push_back(spath.substr(last,i-last));
-          last = i+1;
-          std::cout <<paths.back()<<std::endl;
-        }
-        paths.push_back(spath.substr(last,std::string::npos));
-	s_db = new PluginManager (paths);
-	s_destructor.object (s_db);
-    }
-   /* */
-    return s_db;
+  PluginManager* s = singleton();
+  if(0 == s) {
+    throw cms::Exception("PluginManagerNotConfigured");
+  }
+  return s;
 }
 
 /** Configure the destruction of the plug-in manager.  By default the
@@ -122,9 +125,9 @@ PluginManager::destroyOnExit (bool destroy)
 /** Construct a plug-in manager using the @a path as the list of module
     definition directories.  This constructor is private; use #get()
     instead.  */
-PluginManager::PluginManager (const SearchPath &path)
+PluginManager::PluginManager (const Config &config)
     : m_initialised (false),
-      m_searchPath (path)
+      m_searchPath (config.searchPath())
 {}
 
 /** Destroy the plug-in manager.  Frees all module caches.  */
@@ -140,8 +143,8 @@ PluginManager::~PluginManager (void)
     // global destructors would have already destructed them, causing
     // them to unregistered themselves from me.  (This assumes correct
     // library dependency linkage.)
-    while (! m_factories.empty ())
-	delete *m_factories.begin ();
+    //while (! m_factories.empty ())
+	//delete *m_factories.begin ();
 }
 
 /** Initialise the plug-in manager.  This causes all the plug-in
@@ -160,11 +163,20 @@ PluginManager::~PluginManager (void)
     caching fails for some other reason are ignored (see logging output
     for details).  */
 void
-PluginManager::initialise (void)
+PluginManager::initialise ()
 {
     if (m_initialised) return;
     m_initialised = true;
+    
+    PluginFactoryManager* pfm = PluginFactoryManager::get();
+    pfm->pluginAddedSignal_.connect(boost::bind(boost::mem_fn(&PluginManager::newPlugin),this,_1));
 
+    for(PluginFactoryManager::iterator it=pfm->begin();
+        it != pfm->end();
+        ++it) {
+      newPlugin(*it);
+    }
+    
     SearchPath::const_iterator dir = m_searchPath.begin ();
     for ( ; dir != m_searchPath.end (); ++dir)
     {
@@ -177,10 +189,11 @@ PluginManager::initialise (void)
 	// user really wants to have "." in the path -- and that
 	// is exceedingly unlikely -- they can always do so
 	// explicitly.
+        bool doUpdate =true;
 	if (! dir->empty ())
         {
 	    try {
-              m_directories.push_back (new ModuleCache (this, Filename(*dir,boost::filesystem::no_check)));
+              m_directories.push_back (new ModuleCache (this, Filename(*dir,boost::filesystem::no_check),doUpdate));
 	    } catch (cms::Exception &error) {
               /* CDJ */
 		LOG (0, warning, LFplugin_manager, undent << undent
@@ -299,7 +312,8 @@ PluginManager::addFactory (PluginFactoryBase *factory)
     // notify them on each refresh (and when they are added).  The
     // factories should be accessed via XyzDB::get () which gets the
     // global database and registers an instance of the factory into it.
-    m_factories.push_back (factory);
+    PluginFactoryManager::get()->addFactory(factory);
+    //m_factories.push_back (factory);
 }
 
 /** Remove a @a factory from the plug-in manager.  This method is
@@ -309,9 +323,10 @@ PluginManager::addFactory (PluginFactoryBase *factory)
 void
 PluginManager::removeFactory (PluginFactoryBase *factory)
 {
-    FactoryIterator pos = std::find (m_factories.begin (), m_factories.end (), factory);
-    ASSERT (pos != m_factories.end ());
-    m_factories.erase (pos);
+    PluginFactoryManager::get()->removeFactory(factory);
+    //FactoryIterator pos = std::find (m_factories.begin (), m_factories.end (), factory);
+    //ASSERT (pos != m_factories.end ());
+    //m_factories.erase (pos);
 }
 
 /** Find a factory that matches category label @a name.  Internal
@@ -320,11 +335,7 @@ PluginManager::removeFactory (PluginFactoryBase *factory)
 PluginFactoryBase *
 PluginManager::findFactory (const std::string &name)
 {
-    FactoryIterator pos = m_factories.begin ();
-    while (pos != m_factories.end () && (*pos)->category () != name)
-	++pos;
-
-    return pos != m_factories.end () ? *pos : 0;
+    return PluginFactoryManager::get()->findFactory(name);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -478,5 +489,41 @@ PluginManager::feedback (FeedbackCode code,
 			 const std::string &scope,
 			 cms::Exception *error /* = 0 */ )
 { feedback (FeedbackData (code, scope, error)); }
+                         
+void
+PluginManager::newPlugin(PluginFactoryBase* iPlugin)
+{
+  
+  PluginManager::DirectoryIterator	dir;
+  ModuleCache::Iterator		module;
+  ModuleDescriptor			*cache;
+  unsigned				i;
+  
+  // The modules cannot have infos already cached that we need to
+  // avoid recreating.  This is because the infos can be created
+  // only in one of two ways, and in either case the factory knows
+  // *and* has already cleared out those infos in the derived
+  // rebuild() before invoking us.  Infos restored from the cache
+  // are managed by the factory, and thus the known and already
+  // deleted.  When infos are created via the factory's describe()
+  // method, the factory must already exist and thus the infos are
+  // automatically registered (and thus already deleted).  The
+  // latter is because the factory must be in the same library as the
+  // one invoking describe(), or one of its dependents; either way
+  // since the factory is a global object, it has been constructed (the
+  // query happens after global constructors).
+  //
+  // Which brings us back to the point: there cannot be infos we
+  // care about at this point.  As we start, the derived factory has no
+  // infos (guaranteed by derived rebuild()), so the only infos that
+  // exist are those we create here below.
+  for (dir = beginDirectories (); dir != endDirectories (); ++dir)
+    for (module = (*dir)->begin (); module != (*dir)->end (); ++module)
+      for (cache=(*module)->cacheRoot(), i=0; i < cache->children(); ++i)
+        if (cache->child (i)->token (0) == iPlugin->category ())
+          iPlugin->restore (*module, cache->child (i));
+  
+  //iPlugin->rebuild();
+}
 //#endif
 } // namespace edmplugin

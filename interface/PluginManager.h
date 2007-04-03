@@ -57,6 +57,30 @@ public:
     typedef boost::transform_iterator<GetSecond<Filename,Module*>, ModuleMap::const_iterator> ModuleIterator;
     typedef std::vector<std::string> SearchPath;
 
+    class Config {
+      public:
+      Config() :
+       m_updateCacheIfNeeded(true)
+      {
+      }
+      Config& searchPath(const SearchPath& iPath) {
+        m_path = iPath;
+        return *this;
+      }
+      const SearchPath& searchPath() const {
+        return m_path;
+      }
+      Config& updateCacheIfNeeded(bool iOption) {
+        m_updateCacheIfNeeded = iOption;
+        return *this;
+      }
+      bool updateCacheIfNeeded() const {
+        return m_updateCacheIfNeeded;
+      }
+      private:
+        SearchPath m_path;
+        bool m_updateCacheIfNeeded;
+    };
     /// Types of information passed as feedback.
     enum FeedbackCode
     {
@@ -94,9 +118,10 @@ public:
     typedef sigc::signal<void,const FeedbackData&>::slot_type FeedbackCB;
     static PluginManager *get (void);
     static void		destroyOnExit (bool destroy);
+    static PluginManager& configure(const Config& );
 
     // cache management interface
-    void		initialise (void);
+    void		initialise ();
     void		refresh (void);
 
     // feedback management
@@ -137,7 +162,7 @@ private:
     //typedef FeedbackList::iterator		FeedbackIterator;
 
     friend class PluginManagerDestructor;
-    PluginManager (const SearchPath &path);
+    PluginManager (const Config& iConfig);
     ~PluginManager (void);
 
     void		rebuild (void);
@@ -145,12 +170,16 @@ private:
     FactoryIterator	endFactories (void);
     PluginFactoryBase *findFactory (const std::string &name);
 
-    bool		m_initialised;
+    void newPlugin(PluginFactoryBase *);
+    static PluginManager*& singleton();
+    
+    bool		m_initialised; //hope to remove soon
     SearchPath		m_searchPath;
     DirectoryMap	m_directories;
     ModuleMap		m_modules;
-    FactoryList		m_factories;
+    //FactoryList		m_factories;
     FeedbackList	m_feedbacks;
+    bool m_updateCacheIfNeeded; //Hope to remove soon
 
     // undefined semantics
     PluginManager (const PluginManager &);
