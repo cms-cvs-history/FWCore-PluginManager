@@ -3,3 +3,8 @@
  <use name=FWCore/MessageService>
  <use name=FWCore/PluginManager>
 </bin>
+<bin name=EdmPluginRefresh file=refresh.cc>
+ <use name=boost>
+ <use name=FWCore/MessageService>
+ <use name=FWCore/PluginManager>
+</bin>

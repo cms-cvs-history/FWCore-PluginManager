@@ -11,9 +11,11 @@
 
 #include "boost/thread/thread.hpp"
 #include "FWCore/MessageService/interface/MessageLoggerScribe.h"
-#include "FWCore/MessageLogger/interface/MessageDrop.h"
-#include "FWCore/MessageService/interface/MessageServicePresence.h"
 
+#include "FWCore/MessageService/interface/MessageServicePresence.h"
+#include "FWCore/MessageLogger/interface/MessageDrop.h"
+
+#include <boost/filesystem/operations.hpp>
 #include <iostream>
 #include <utility>
 #include <cstdlib>
@@ -81,19 +83,30 @@ namespace  {
   }
 }  // namespace
 */
-int main (int, char **argv)
+int main (int argc, char **argv)
 {
   int returnValue = EXIT_SUCCESS;
   edm::service::MessageServicePresence presence;
   edm::MessageDrop::instance()->debugEnabled=false;
 
   try {
-    const char* const kSearchPath = getenv("EDM_PLUGINS");
-    if( 0 == kSearchPath ) {
-      std::cerr <<"The environment variable 'EDM_PLUGINS' has not been set"<<std::endl;
-      return 1;
+    std::string spath;
+    const char* kSearchPath = 0;
+    if(argc >1) {
+      kSearchPath = argv[1];
+      spath = std::string(kSearchPath);
+      if (not boost::filesystem::is_directory(kSearchPath) ) {
+        //at the moment, we can't handle an individual file
+        spath = boost::filesystem::path(kSearchPath).branch_path().string();
+      }
+    } else {
+      kSearchPath = getenv("EDM_PLUGINS");
+      if( 0 == kSearchPath ) {
+        std::cerr <<"The environment variable 'EDM_PLUGINS' has not been set"<<std::endl;
+        return 1;
+      }
+      spath = std::string(kSearchPath);
     }
-    std::string spath(kSearchPath);
     std::string::size_type last=0;
     std::string::size_type index=0;
     std::vector<std::string> paths;
@@ -112,35 +125,10 @@ int main (int, char **argv)
     typedef SeenSet::iterator			SeenSetIterator;
 
     PluginManager			*db = PluginManager::get ();
-    PluginManager::DirectoryIterator	dir;
-    ModuleCache::Iterator		plugin;
-    ModuleDescriptor			*cache;
-    SeenSet				seen;
-    unsigned				i;
 
     db = &rdb;
     db->addFeedback (&feedback);
     db->initialise ();
-    for (dir = db->beginDirectories (); dir != db->endDirectories (); ++dir)
-	for (plugin = (*dir)->begin (); plugin != (*dir)->end (); ++plugin)
-	    for (cache=(*plugin)->cacheRoot(), i=0; i < cache->children(); ++i)
-		seen.insert (Seen (cache->child (i)->token (0),
-				   cache->child (i)->token (1)));
-
-    SeenSetIterator cat = seen.begin ();
-    SeenSetIterator current; 
-    while (cat != seen.end ())
-    {
-	std::cout << "Category " << cat->first << ":\n";
-	current = cat;
-	while (current != seen.end () && current->first == cat->first)
-	{
-	    std::cout << "  " << current->second << std::endl;
-	    ++current;
-	}
-	cat = current;
-    }
-
   }catch(std::exception& iException) {
     std::cout <<"Caught exception "<<iException.what()<<std::endl;
     returnValue = 1;
