@@ -107,7 +107,7 @@ decode (const std::string &input)
 /** Initialise a module cache in @a directory.  Initialises the cache
     to clear state and then invokes #refresh() to rebuild; this causes
     for instance #Module objects to be created.  */
-ModuleCache::ModuleCache (PluginManager *manager, const Filename &directory)
+ModuleCache::ModuleCache (PluginManager *manager, const Filename &directory,bool doUpdate)
     : m_manager (manager),
       m_directory (directory)
 {
@@ -122,7 +122,7 @@ ModuleCache::ModuleCache (PluginManager *manager, const Filename &directory)
 
     m_parse.file   = 0;
     m_parse.module = 0;
-    refresh ();
+    refresh (doUpdate);
 }
 
 /** Destroy the module cache.  Destroys all modules owned by the cache.  */
@@ -156,10 +156,10 @@ ModuleCache::end (void) const
     loaded and to be compared with the current state of the directory.
     If there are any differences, a new cache will be written out.  */
 void
-ModuleCache::refresh (void)
+ModuleCache::refresh (bool doUpdate)
 {
     load ();
-    rebuild ();
+    rebuild (doUpdate);
     notify ();
     update ();
 }
@@ -358,7 +358,7 @@ ModuleCache::makeBad (const std::string &file, const std::string &time)
     #m_cache, and build a new @a cache that reflects the changes.
     Returns a cache status code to reflect the new state.  */
 ModuleCache::CacheStatus
-ModuleCache::scanModules (RegList &cache)
+ModuleCache::scanModules (RegList &cache, bool doUpdate)
 {
     LOG (0, trace, LFplugin_manager,
 	 "scanning `" << m_directory.string() << "'\n" << indent);
@@ -382,9 +382,30 @@ ModuleCache::scanModules (RegList &cache)
 	struct stat	statbuf;
 	Filename	filename (*file);
         Filename        shortName(file->leaf(),boost::filesystem::no_check);
-        if (shortName.string()[0] == '.') {
+        std::string stringName = shortName.string();
+        
+
+        if (stringName[0] == '.') {
           continue;
         }
+/*
+        //only read *.edmplugin files
+        static std::string kPluginExtension(".edmplugin");
+        if (stringName.size() < kPluginExtension.size()) {
+          continue;
+        }
+        if(stringName.substr(stringName.size()-kPluginExtension.size()) != kPluginExtension) {
+          continue;
+        }
+*/
+        static std::string kPluginPrefix("plugin");
+        if (stringName.size() < kPluginPrefix.size()) {
+          continue;
+        }
+        if(stringName.substr(0,kPluginPrefix.size()) != kPluginPrefix) {
+          continue;
+        }
+        
 	int		status = stat (filename.native_file_string().c_str(), &statbuf);
 
 	// Ignore files we cannot stat
@@ -402,6 +423,18 @@ ModuleCache::scanModules (RegList &cache)
 	RegIterator match
 	    = std::find_if (m_cache.begin(), m_cache.end(), FileByName (shortName));
 
+        if(!doUpdate) {
+          if(match !=m_cache.end()) {
+	    // Copy the old cache to the new cache.  This relies on
+	    // the knowledge that the old cache will be thrown away
+	    // and so it is ok to steal the entry from the old one to
+	    // the new one.
+	    LOG (0, trace, LFplugin_manager,
+		 "==> unchanged definition `" << file->native_file_string() << "'\n");
+	    cache.splice (cache.end (), m_cache, match);
+          }
+          continue;
+        }
 	if (match == m_cache.end ())
 	{
 	    LOG (0, trace, LFplugin_manager,
@@ -434,8 +467,13 @@ ModuleCache::scanModules (RegList &cache)
         sm <<statbuf.st_mtime;
         std::string time = sm.str();
 	ModuleDescriptor *top = new ModuleDescriptor (0, s_cacheTag);
-	new ModuleDescriptor (top, ModuleReg::tag (), shortName.native_file_string(), time, "1");
+	ModuleDescriptor* fDesc = new ModuleDescriptor (top, ModuleReg::tag (), shortName.native_file_string(), time, "1");
 
+        //This also is the information for the module
+        ModuleDescriptor* mod= new ModuleDescriptor(fDesc,Module::tag(),shortName.native_file_string());
+        //CDJ should put 'try catch' block here to be consistent with rest of code
+        reconstruct(top);
+        /*
 	// Mark bad files we cannot `parse' (errors are already logged).
 	// We already tried to parse the file itself, now make a dummy
 	// proxy that marks the file bad and forget about the contents.
@@ -444,7 +482,7 @@ ModuleCache::scanModules (RegList &cache)
 	    reconstruct (makeBad (shortName.native_file_string(), time));
 	    m_state.skipped = true;
 	}
-
+         */
 	// Try loading the modules to check that they are well-formed:
 	// ensure that each module loads and resolves the required
 	// entry points.  If this fails, mark the whole registration
@@ -505,7 +543,7 @@ ModuleCache::scanModules (RegList &cache)
     contents and compares with the cache, updating it to the new state
     of things.  Updates #m_state to reflect what happened.  */
 void
-ModuleCache::rebuild (void)
+ModuleCache::rebuild (bool doUpdate)
 {
     LOG (0, trace, LFplugin_manager,
 	 "rebuilding cache in `" << m_directory.string() << "'\n" << indent);
@@ -515,7 +553,7 @@ ModuleCache::rebuild (void)
     // delete whatever was left over from the old cache (creating the
     // new one may steal bits of the old).
     RegList cache;
-    m_state.status = scanModules (cache);
+    m_state.status = scanModules (cache,doUpdate);
     m_cache.swap (cache);
     for (RegIterator r = cache.begin (); r != cache.end (); ++r)
 	delete *r;
