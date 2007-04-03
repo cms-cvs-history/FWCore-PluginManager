@@ -30,7 +30,7 @@ namespace edm
     ~ProblemTracker();
     ProblemTracker(const ProblemTracker&);
 
-    static void feedback(edmplugin::PluginManager::FeedbackData data);
+    void feedback(edmplugin::PluginManager::FeedbackData data);
     static char failure(const char* msg);
 
     std::string last_scope_;
