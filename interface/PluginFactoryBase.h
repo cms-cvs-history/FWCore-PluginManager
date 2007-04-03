@@ -35,8 +35,10 @@ public:
     virtual void	removeInfo (PluginInfo *info) = 0;
 
 protected:
+    friend class PluginManager;
     // Notifications from derived class
     virtual void	rebuild (void);
+    void finishedConstruction();
 
 private:
     std::string	m_tag;

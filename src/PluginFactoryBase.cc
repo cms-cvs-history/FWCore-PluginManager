@@ -1,6 +1,7 @@
 //<<<<<< INCLUDES                                                       >>>>>>
 
 #include "FWCore/PluginManager/interface/PluginFactoryBase.h"
+#include "FWCore/PluginManager/interface/PluginFactoryManager.h"
 #include "FWCore/PluginManager/interface/PluginManager.h"
 #include "FWCore/PluginManager/interface/ModuleDescriptor.h"
 #include "FWCore/PluginManager/interface/ModuleCache.h"
@@ -21,16 +22,23 @@ namespace edmplugin {
 PluginFactoryBase::PluginFactoryBase (const std::string &tag)
     : m_tag (tag)
 {
-    ASSERT (PluginManager::get ());
+    ASSERT (PluginFactoryManager::get ());
     ASSERT (! m_tag.empty ());
-    PluginManager::get ()->addFactory (this);
 }
 
 PluginFactoryBase::~PluginFactoryBase (void)
 {
-    ASSERT (PluginManager::get ());
+    ASSERT (PluginFactoryManager::get ());
     ASSERT (! m_tag.empty ());
-    PluginManager::get ()->removeFactory (this);
+    PluginFactoryManager::get ()->removeFactory (this);
+}
+
+void
+PluginFactoryBase::finishedConstruction()
+{
+  //have to wait until inheriting classes have finished their construction
+  // so that the virtual table has been filled in properly
+  PluginFactoryManager::get ()->addFactory (this);
 }
 
 const std::string &
