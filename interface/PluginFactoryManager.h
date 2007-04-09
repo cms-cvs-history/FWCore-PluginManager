@@ -1,5 +1,5 @@
-#ifndef PluginManager_PluginFactoryManager_h
-#define PluginManager_PluginFactoryManager_h
+#ifndef FWCore_PluginManager_PluginFactoryManager_h
+#define FWCore_PluginManager_PluginFactoryManager_h
 // -*- C++ -*-
 //
 // Package:     PluginManager
@@ -15,59 +15,50 @@
 */
 //
 // Original Author:  Chris Jones
-//         Created:  Thu Mar  8 14:24:50 PST 2007
+//         Created:  Wed Apr  4 12:49:41 EDT 2007
 // $Id$
 //
 
 // system include files
-#include <list>
+#include <string>
+#include <vector>
 #include "sigc++/signal.h"
 
 // user include files
-# include "FWCore/PluginManager/interface/PluginFactoryBase.h"
 
 // forward declarations
 namespace edmplugin {
-
+  class PluginFactoryBase;
+  class DummyFriend;
 class PluginFactoryManager
 {
 
    public:
-      friend class PluginManager;
-      typedef sigc::signal<void,PluginFactoryBase*>  PluginAddedSignal;
+      friend class DummyFriend;
+  
+      ~PluginFactoryManager();
 
-      typedef std::list<PluginFactoryBase *>	FactoryList;
-      typedef FactoryList::iterator		FactoryIterator;
-      typedef FactoryList::iterator iterator;
+      typedef std::vector<const PluginFactoryBase*>::const_iterator const_iterator;
       // ---------- const member functions ---------------------
+      const_iterator begin() const;
+      const_iterator end() const;
 
       // ---------- static member functions --------------------
       static PluginFactoryManager* get();
 
       // ---------- member functions ---------------------------
-      void		addFactory (PluginFactoryBase *factory);
-      void		removeFactory (PluginFactoryBase *factory);
-
-      PluginAddedSignal pluginAddedSignal_;
+      void addFactory(const PluginFactoryBase*);
+      sigc::signal<void,const PluginFactoryBase*> newFactory_;
       
-      iterator begin() {return m_factories.begin();}
-      iterator end() {return m_factories.end();}
-        
    private:
       PluginFactoryManager();
-      virtual ~PluginFactoryManager();
-      
       PluginFactoryManager(const PluginFactoryManager&); // stop default
 
       const PluginFactoryManager& operator=(const PluginFactoryManager&); // stop default
 
-      
-      FactoryIterator	beginFactories (void);
-      FactoryIterator	endFactories (void);
-      PluginFactoryBase *findFactory (const std::string &name);
-
       // ---------- member data --------------------------------
-      FactoryList		m_factories;
+      std::vector<const PluginFactoryBase*> factories_;
+
 };
 
 }

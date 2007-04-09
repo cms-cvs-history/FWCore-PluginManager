@@ -1,202 +1,110 @@
-#ifndef PLUGIN_MANAGER_PLUGIN_DB_H
-# define PLUGIN_MANAGER_PLUGIN_DB_H
+#ifndef FWCore_PluginManager_PluginManager_h
+#define FWCore_PluginManager_PluginManager_h
+// -*- C++ -*-
+//
+// Package:     PluginManager
+// Class  :     PluginManager
+// 
+/**\class PluginManager PluginManager.h FWCore/PluginManager/interface/PluginManager.h
 
-//<<<<<< INCLUDES                                                       >>>>>>
+ Description: Manages the loading of shared objects
 
-# include "FWCore/PluginManager/interface/config.h"
-# include "FWCore/PluginManager/interface/Filename.h"
-# //include "FWCore/PluginManager/interface/MapIterator.h"
-# //include "FWCore/PluginManager/interface/SearchPath.h"
-# //include "FWCore/PluginManager/interface/Callback.h"
-# include <string>
-# include <list>
-# include <map>
-# include <vector>
-#include <boost/iterator/transform_iterator.hpp>
+ Usage:
+    <usage>
+
+*/
+//
+// Original Author:  Chris Jones
+//         Created:  Wed Apr  4 14:28:48 EDT 2007
+// $Id$
+//
+
+// system include files
+#include <vector>
+#include <map>
+#include <string>
+#include <boost/filesystem/path.hpp>
+#include <boost/shared_ptr.hpp>
 #include "sigc++/signal.h"
 
-namespace cms {
-  class Exception;
-}
+// user include files
+#include "FWCore/PluginManager/interface/SharedLibrary.h"
+#include "FWCore/PluginManager/interface/PluginInfo.h"
 
+// forward declarations
 namespace edmplugin {
-//<<<<<< PUBLIC DEFINES                                                 >>>>>>
-//<<<<<< PUBLIC CONSTANTS                                               >>>>>>
-//<<<<<< PUBLIC TYPES                                                   >>>>>>
-
-class Module;
-class ModuleCache;
-class ModuleDescriptor;
-class PluginFactoryBase;
-class PluginInfo;
-//class Error;
-
-//<<<<<< PUBLIC VARIABLES                                               >>>>>>
-//<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
-template <typename T, typename U> struct GetSecond : public std::unary_function<const std::pair<T,U>&, const U&>{
-  const U& operator()(const std::pair<T,U>& iPair) const { return iPair.second; }
-};
-//<<<<<< CLASS DECLARATIONS                                             >>>>>>
-
-/** Catalog of dynamically available components in the system.
-
-    #PluginManager maintains a catalog of objects that can be
-    created dynamically.  Most of the objects are provided by plug-in
-    modules: dynamically loaded shared libraries.  Subclasses of
-    #PluginFactoryBase provided concrete views of the catalog.
-
-    There is only one instance of this type, provided by #get().  */
+  class DummyFriend;
+  class PluginFactoryBase;
 class PluginManager
 {
-public:
-    typedef std::list<ModuleCache *>		DirectoryMap;
-    typedef DirectoryMap::const_iterator	DirectoryIterator;
+   friend class DummyFriend;
+  public:
+     typedef std::vector<std::string> SearchPath;
+     typedef std::vector<PluginInfo> Infos;
+     typedef std::map<std::string, Infos > CategoryToInfos;
 
-    typedef std::map<Filename, Module *>	ModuleMap;
-    //typedef MapValueIterator<ModuleMap>		ModuleIterator;
-    typedef boost::transform_iterator<GetSecond<Filename,Module*>, ModuleMap::const_iterator> ModuleIterator;
-    typedef std::vector<std::string> SearchPath;
-
-    class Config {
+     class Config {
       public:
-      Config() :
-       m_updateCacheIfNeeded(true)
-      {
+       Config() { }
+       Config& searchPath(const SearchPath& iPath) {
+         m_path = iPath;
+         return *this;
+       }
+       const SearchPath& searchPath() const {
+         return m_path;
+       }
+       private:
+       SearchPath m_path;
+     };
+
+      ~PluginManager();
+
+      // ---------- const member functions ---------------------
+      const SharedLibrary& load(const std::string& iCategory,
+                                const std::string& iPlugin);
+
+      const boost::filesystem::path& loadableFor(const std::string& iCategory,
+                                                 const std::string& iPlugin);
+      
+      /**The container is ordered by category, then plugin name and then by precidence order of the plugin files.
+        Therefore the first match on category and plugin name will be the proper file to load
+        */
+      const CategoryToInfos& categoryToInfos() const {
+        return categoryToInfos_;
       }
-      Config& searchPath(const SearchPath& iPath) {
-        m_path = iPath;
-        return *this;
-      }
-      const SearchPath& searchPath() const {
-        return m_path;
-      }
-      Config& updateCacheIfNeeded(bool iOption) {
-        m_updateCacheIfNeeded = iOption;
-        return *this;
-      }
-      bool updateCacheIfNeeded() const {
-        return m_updateCacheIfNeeded;
-      }
-      private:
-        SearchPath m_path;
-        bool m_updateCacheIfNeeded;
-    };
-    /// Types of information passed as feedback.
-    enum FeedbackCode
-    {
-	// Status feedback: no error object
-	StatusLoading,		//< About to load a module library
-	StatusUnloading,	//< About to unload a module library
-	StatusEntries,		//< About to check for entry points
-	StatusAttaching,	//< About to attach a module library
-	StatusDetaching,	//< About to detach a module library
-	StatusQuerying,		//< About to query a module library
+      // ---------- static member functions --------------------
+      ///file name of the shared object being loaded
+      static const std::string& loadingFile() { 
+        return loadingLibraryNamed_();}
 
-	// Error feedback: see the passed error object
-	ErrorLoadFailure,	//< Module library failed to load
-	ErrorEntryFailure,	//< Missing entry points in the module
-	ErrorBadModule,		//< Module is being marked bad
-	ErrorBadCacheFile,	//< Bad or inaccessible cache file
-	ErrorNoFactory,		//< Missing factory for a plug-in
+      ///if the value returned from loadingFile matches this string then the file is statically linked
+      static const std::string& staticallyLinkedLoadingFileName();
 
-	// Fallback
-	Other			//< Something else
-    };
+      
+      static PluginManager* get();
+      static PluginManager& configure(const Config& );
+      
+      static bool isAvailable();
+      
+      // ---------- member functions ---------------------------
+      sigc::signal<void,const boost::filesystem::path&> goingToLoad_;
+      sigc::signal<void,const SharedLibrary&> justLoaded_;
+   private:
+      PluginManager(const Config&);
+      PluginManager(const PluginManager&); // stop default
 
-    /// Simple tuple of data passed to feedback clients.
-    struct FeedbackData
-    {
-      FeedbackData (FeedbackCode code, const std::string &s, cms::Exception *err = 0);
+      const PluginManager& operator=(const PluginManager&); // stop default
 
-	FeedbackCode	code;	//< Feedback code.
-	std::string	scope;	//< Subject, e.g. module or file name.
-        cms::Exception		*error;	//< Possible error object.
-    };
-
-    /// Feedback callback type
-    //CDJ typedef Callback1<FeedbackData> FeedbackCB;
-    typedef sigc::signal<void,const FeedbackData&>::slot_type FeedbackCB;
-    static PluginManager *get (void);
-    static void		destroyOnExit (bool destroy);
-    static PluginManager& configure(const Config& );
-
-    // cache management interface
-    void		initialise ();
-    void		refresh (void);
-
-    // feedback management
-    void		addFeedback (FeedbackCB callback);
-    void		removeFeedback (FeedbackCB callback);
-    void		feedback (FeedbackData data);
-    void		feedback (FeedbackCode code,
-		    		  const Filename &scope,
-				  cms::Exception *error = 0); 
-    void		feedback (FeedbackCode code,
-		    		  const std::string &scope,
-				  cms::Exception *error = 0);
- 
-    // access to db structure
-    DirectoryIterator	beginDirectories (void) const;
-    DirectoryIterator	endDirectories (void) const;
-    DirectoryIterator	locateDirectory (const Filename &name) const;
-    ModuleCache *	directory (const Filename &name) const;
-
-    ModuleIterator	beginModules (void) const;
-    ModuleIterator	endModules (void) const;
-    ModuleIterator	locateModule (const Filename &libraryName) const;
-    Module *		module (const Filename &libraryName) const;
-
-    // interface for factory management; mainly private to implementation
-    void		addInfo (PluginInfo *info);
-    void		removeInfo (PluginInfo *info);
-    void		restore (Module *module, ModuleDescriptor *from);
-
-    void		addFactory (PluginFactoryBase *factory);
-    void		removeFactory (PluginFactoryBase *factory);
-
-private:
-    typedef std::list<PluginFactoryBase *>	FactoryList;
-    typedef FactoryList::iterator		FactoryIterator;
-
-    typedef sigc::signal<void,const FeedbackData&>  FeedbackList;
-    //typedef FeedbackList::iterator		FeedbackIterator;
-
-    friend class PluginManagerDestructor;
-    PluginManager (const Config& iConfig);
-    ~PluginManager (void);
-
-    void		rebuild (void);
-    FactoryIterator	beginFactories (void);
-    FactoryIterator	endFactories (void);
-    PluginFactoryBase *findFactory (const std::string &name);
-
-    void newPlugin(PluginFactoryBase *);
-    static PluginManager*& singleton();
-    
-    bool		m_initialised; //hope to remove soon
-    SearchPath		m_searchPath;
-    DirectoryMap	m_directories;
-    ModuleMap		m_modules;
-    //FactoryList		m_factories;
-    FeedbackList	m_feedbacks;
-    bool m_updateCacheIfNeeded; //Hope to remove soon
-
-    // undefined semantics
-    PluginManager (const PluginManager &);
-    PluginManager &operator= (const PluginManager &);
+      void newFactory(const PluginFactoryBase* );
+      static std::string& loadingLibraryNamed_();
+      static PluginManager*& singleton();
+      
+      // ---------- member data --------------------------------
+      SearchPath searchPath_;
+      std::map<boost::filesystem::path, boost::shared_ptr<SharedLibrary> > loadables_;
+      
+      CategoryToInfos categoryToInfos_;
 };
 
-//<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
-//<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
-
-inline
-PluginManager::FeedbackData::FeedbackData (FeedbackCode c,
-					   const std::string &s,
-					   cms::Exception *err /* = 0 */)
-    : code (c),
-      scope (s),
-      error (err)
-{}
-
-} // namespace edmplugin
-#endif // PLUGIN_MANAGER_PLUGIN_DB_H
+}
+#endif

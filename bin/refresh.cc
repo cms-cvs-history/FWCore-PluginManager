@@ -1,134 +1,175 @@
-//<<<<<< INCLUDES                                                       >>>>>>
 
-#include "FWCore/PluginManager/interface/PluginManager.h"
-#include "FWCore/PluginManager/interface/ModuleDescriptor.h"
-#include "FWCore/PluginManager/interface/ModuleCache.h"
-#include "FWCore/PluginManager/interface/Module.h"
-//#include "SealBase/StringOps.h"
-//#include "SealBase/Signal.h"
-//#include "SealBase/Error.h"
-#include "FWCore/Utilities/interface/Exception.h"
-
-#include "boost/thread/thread.hpp"
-#include "FWCore/MessageService/interface/MessageLoggerScribe.h"
-
-#include "FWCore/MessageService/interface/MessageServicePresence.h"
-#include "FWCore/MessageLogger/interface/MessageDrop.h"
-
+#include <boost/filesystem/path.hpp>
 #include <boost/filesystem/operations.hpp>
+#include <boost/bind.hpp>
+#include <boost/mem_fn.hpp>
+
+#include <fstream>
 #include <iostream>
 #include <utility>
 #include <cstdlib>
 #include <string>
 #include <set>
+#include <algorithm>
 
-//<<<<<< PRIVATE DEFINES                                                >>>>>>
-//<<<<<< PRIVATE CONSTANTS                                              >>>>>>
-//<<<<<< PRIVATE TYPES                                                  >>>>>>
-//<<<<<< PRIVATE VARIABLE DEFINITIONS                                   >>>>>>
-//<<<<<< PUBLIC VARIABLE DEFINITIONS                                    >>>>>>
-//<<<<<< CLASS STRUCTURE INITIALIZATION                                 >>>>>>
-//<<<<<< PRIVATE FUNCTION DEFINITIONS                                   >>>>>>
-//<<<<<< PUBLIC FUNCTION DEFINITIONS                                    >>>>>>
-//<<<<<< MEMBER FUNCTION DEFINITIONS                                    >>>>>>
+#include "FWCore/PluginManager/interface/PluginFactoryManager.h"
+#include "FWCore/PluginManager/interface/PluginFactoryBase.h"
+#include "FWCore/Utilities/interface/Exception.h"
+#include "FWCore/PluginManager/interface/CacheParser.h"
+#include "FWCore/PluginManager/interface/SharedLibrary.h"
 
+#include "FWCore/PluginManager/interface/PluginCapabilities.h"
+#include "FWCore/PluginManager/interface/standard.h"
 using namespace edmplugin;
 
-void feedback (PluginManager::FeedbackData data)
-{
-    std::string explanation;
-    if (data.error) {
-      explanation=data.error->what();
-      std::string::size_type last=0;
-      std::string::size_type i=0;
-      while(std::string::npos != (i=explanation.find_first_of('\n',last))){
-        explanation.insert(i+1,"\t",1);
-        last = i+2;
-      }
+static const char s_cacheFile[] = ".edmplugincache";
+
+namespace {
+  struct Listener {
+    typedef edmplugin::CacheParser::NameAndType NameAndType;
+    typedef edmplugin::CacheParser::NameAndTypes NameAndTypes;
+    
+    void newFactory(const edmplugin::PluginFactoryBase* iBase) {
+      iBase->newPluginAdded_.connect(boost::bind(boost::mem_fn(&Listener::newPlugin),this,_1,_2));
     }
-    if (data.code == PluginManager::StatusLoading)
-	std::cerr << "Note: Loading " << data.scope << "\n";
-
-    else if (data.code == PluginManager::ErrorLoadFailure)
-	std::cerr << "  *** WARNING: module `" << data.scope
-		  << "' failed to load for the following reason\n\t"
-		  << explanation << "\n";
-
-    else if (data.code == PluginManager::ErrorBadModule)
-	std::cerr << "  *** WARNING: module `" << data.scope
-		  << "' ignored until problems with it are fixed.\n\n";
-
-    else if (data.code == PluginManager::ErrorBadCacheFile)
-	std::cerr << "  *** WARNING: cache file " << data.scope
-		  << " is corrupted.\n";
-
-    else if (data.code == PluginManager::ErrorEntryFailure)
-	std::cerr << "  *** WARNING: module `" << data.scope
-		  << "' does not have the required entry point, reason was\n\t"
-		  << explanation << "\n";
-
-    // This cannot actually trigger in SealPlugin* utility, for example only
-    else if (data.code == PluginManager::ErrorNoFactory)
-	std::cerr << "  *** WARNING: module `" << data.scope
-		  << "' missing one or more factories for plug-ins\n";
+    void newPlugin(const std::string& iCategory, const edmplugin::PluginInfo& iInfo) {
+      nameAndTypes_.push_back(NameAndType(iInfo.name_,iCategory));
+    }
+    
+    NameAndTypes nameAndTypes_;
+  };
 }
-
-/*
-namespace  {
-  void
-  runMessageLoggerScribe()
-  {
-    edm::service::MessageLoggerScribe  m;
-    m.run();
-  }
-}  // namespace
-*/
 int main (int argc, char **argv)
 {
+  using boost::filesystem::path;
+  if(argc ==1) {
+    std::cerr <<"requires at least one argument"<<std::endl;
+    return 1;
+  }
+
   int returnValue = EXIT_SUCCESS;
-  edm::service::MessageServicePresence presence;
-  edm::MessageDrop::instance()->debugEnabled=false;
 
   try {
-    std::string spath;
-    const char* kSearchPath = 0;
-    if(argc >1) {
-      kSearchPath = argv[1];
-      spath = std::string(kSearchPath);
-      if (not boost::filesystem::is_directory(kSearchPath) ) {
-        //at the moment, we can't handle an individual file
-        spath = boost::filesystem::path(kSearchPath).branch_path().string();
-      }
-    } else {
-      kSearchPath = getenv("EDM_PLUGINS");
-      if( 0 == kSearchPath ) {
-        std::cerr <<"The environment variable 'EDM_PLUGINS' has not been set"<<std::endl;
+    //first find the directory and create a list of files to look at in that directory
+    path directory(argv[1]);
+    std::vector<std::string> files;
+    bool removeMissingFiles = false;
+    if(boost::filesystem::is_directory(directory)) {
+      if (argc >2) {
+        std::cerr <<"if a directory is given then only one argument is allowed"<<std::endl;
         return 1;
       }
-      spath = std::string(kSearchPath);
+      
+      //if asked to look at who directory, then we can also remove missing files
+      removeMissingFiles = true;
+      
+      boost::filesystem::directory_iterator       file (directory);
+      boost::filesystem::directory_iterator       end;
+
+      path cacheFile(directory);
+      cacheFile /= standard::cachefileName();
+
+      std::time_t cacheLastChange(0);
+      if(exists(cacheFile)) {
+        cacheLastChange = last_write_time(cacheFile);
+      }
+      for (; file != end; ++file)
+      {
+
+        path  filename (*file);
+        path shortName(file->leaf(),boost::filesystem::no_check);
+        std::string stringName = shortName.string();
+        
+        static std::string kPluginPrefix(standard::pluginPrefix());
+        if (stringName.size() < kPluginPrefix.size()) {
+          continue;
+        }
+        if(stringName.substr(0,kPluginPrefix.size()) != kPluginPrefix) {
+          continue;
+        }
+
+        if(last_write_time(filename) > cacheLastChange) {
+          files.push_back(stringName);
+        }
+      }
+    } else {
+      //we have files
+      directory = directory.branch_path();
+      for(int index=1; index <argc; ++index) {
+        boost::filesystem::path f(argv[index]);
+        if ( not exists(f) ) {
+          std::cerr <<"the file '"<<f.native_file_string()<<"' does not exist"<<std::endl;
+          return 1;
+        }
+        if (is_directory(f) ) {
+          std::cerr <<"either one directory or a list of files are allowed as arguments"<<std::endl;
+          return 1;
+        }
+        if(directory != f.branch_path()) {
+          std::cerr <<"all files must have be in the same directory ("<<directory.native_file_string()<<")\n"
+          " the file "<<f.native_file_string()<<" does not."<<std::endl;
+        }
+        files.push_back(f.leaf());
+      }
     }
-    std::string::size_type last=0;
-    std::string::size_type index=0;
-    std::vector<std::string> paths;
-    while( (index=spath.find_first_of(':',last))!=std::string::npos) {
-      paths.push_back(spath.substr(last,index-last));
-      last = index+1;
-      std::cout <<paths.back()<<std::endl;
+
+    path cacheFile(directory);
+    cacheFile /= path(s_cacheFile,boost::filesystem::no_check);
+
+    CacheParser::LoadableToPlugins ltp;
+    if(exists(cacheFile) ) {
+      std::ifstream cf(cacheFile.native_file_string().c_str());
+      if(!cf) {
+        cms::Exception("FailedToOpen")<<"unable to open file '"<<cacheFile.native_file_string()<<"' for reading even though it is present.\n"
+        "Please check permissions on the file.";
+      }
+      CacheParser::read(cf, ltp);
     }
-    paths.push_back(spath.substr(last,std::string::npos));
     
-    edmplugin::PluginManager& rdb = edmplugin::PluginManager::configure(PluginManager::Config().searchPath(paths));
+    
+    //load each file and 'listen' to which plugins are loaded
+    Listener listener;
+    edmplugin::PluginFactoryManager* pfm =  edmplugin::PluginFactoryManager::get();
+    pfm->newFactory_.connect(boost::bind(boost::mem_fn(&Listener::newFactory),&listener,_1));
+    std::for_each(pfm->begin(),
+                  pfm->end(),
+                  boost::bind(boost::mem_fn(&Listener::newFactory),&listener,_1));
+    
+    for(std::vector<std::string>::iterator itFile = files.begin();
+        itFile != files.end();
+        ++itFile) {
 
-    // List all categories and items in them.  Set avoids duplicates.
-    typedef std::pair<std::string,std::string>	Seen;
-    typedef std::set<Seen>			SeenSet;
-    typedef SeenSet::iterator			SeenSetIterator;
-
-    PluginManager			*db = PluginManager::get ();
-
-    db = &rdb;
-    db->addFeedback (&feedback);
-    db->initialise ();
+      path loadableFile(directory);
+      loadableFile /=(*itFile);
+      listener.nameAndTypes_.clear();
+      edmplugin::SharedLibrary lib(loadableFile);
+      
+      //PluginCapabilities is special, the plugins do not call it.  Instead, for each shared library load
+      // we need to ask it to try to find plugins
+      PluginCapabilities::get()->tryToFind(lib);
+      
+      ltp[*itFile]=listener.nameAndTypes_;
+    }
+    
+    if(removeMissingFiles) {
+      for(CacheParser::LoadableToPlugins::iterator itFile = ltp.begin();
+          itFile != ltp.end();
+          ++itFile) {
+        path loadableFile(directory);
+        loadableFile /=(itFile->first);
+        if(not exists(loadableFile)) {
+          std::cout <<"removing file '"<<loadableFile.native_file_string()<<"'"<<std::endl;
+          ltp.erase(itFile);
+        }
+      }
+    }
+    //now write our new results
+    std::ofstream cf(cacheFile.native_file_string().c_str());
+    if(!cf) {
+      cms::Exception("FailedToOpen")<<"unable to open file '"<<cacheFile.native_file_string()<<"' for writing.\n"
+      "Please check permissions on the file.";
+    }
+    CacheParser::write(ltp,cf);
   }catch(std::exception& iException) {
     std::cout <<"Caught exception "<<iException.what()<<std::endl;
     returnValue = 1;

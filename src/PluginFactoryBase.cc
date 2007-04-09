@@ -1,82 +1,79 @@
-//<<<<<< INCLUDES                                                       >>>>>>
+// -*- C++ -*-
+//
+// Package:     PluginManager
+// Class  :     PluginFactoryBase
+// 
+// Implementation:
+//     <Notes on implementation>
+//
+// Original Author:  Chris Jones
+//         Created:  Wed Apr  4 13:09:50 EDT 2007
+// $Id$
+//
 
+// system include files
+
+// user include files
 #include "FWCore/PluginManager/interface/PluginFactoryBase.h"
 #include "FWCore/PluginManager/interface/PluginFactoryManager.h"
 #include "FWCore/PluginManager/interface/PluginManager.h"
-#include "FWCore/PluginManager/interface/ModuleDescriptor.h"
-#include "FWCore/PluginManager/interface/ModuleCache.h"
-#include "FWCore/PluginManager/interface/Module.h"
-#include "FWCore/PluginManager/interface/DebugAids.h"
 
 namespace edmplugin {
-//<<<<<< PRIVATE DEFINES                                                >>>>>>
-//<<<<<< PRIVATE CONSTANTS                                              >>>>>>
-//<<<<<< PRIVATE TYPES                                                  >>>>>>
-//<<<<<< PRIVATE VARIABLE DEFINITIONS                                   >>>>>>
-//<<<<<< PUBLIC VARIABLE DEFINITIONS                                    >>>>>>
-//<<<<<< CLASS STRUCTURE INITIALIZATION                                 >>>>>>
-//<<<<<< PRIVATE FUNCTION DEFINITIONS                                   >>>>>>
-//<<<<<< PUBLIC FUNCTION DEFINITIONS                                    >>>>>>
-//<<<<<< MEMBER FUNCTION DEFINITIONS                                    >>>>>>
+//
+// constants, enums and typedefs
+//
 
-PluginFactoryBase::PluginFactoryBase (const std::string &tag)
-    : m_tag (tag)
+//
+// static data member definitions
+//
+
+//
+// constructors and destructor
+//
+
+// PluginFactoryBase::PluginFactoryBase(const PluginFactoryBase& rhs)
+// {
+//    // do actual copying here;
+// }
+
+PluginFactoryBase::~PluginFactoryBase()
 {
-    ASSERT (PluginFactoryManager::get ());
-    ASSERT (! m_tag.empty ());
 }
 
-PluginFactoryBase::~PluginFactoryBase (void)
-{
-    ASSERT (PluginFactoryManager::get ());
-    ASSERT (! m_tag.empty ());
-    PluginFactoryManager::get ()->removeFactory (this);
-}
+//
+// assignment operators
+//
+// const PluginFactoryBase& PluginFactoryBase::operator=(const PluginFactoryBase& rhs)
+// {
+//   //An exception safe implementation is
+//   PluginFactoryBase temp(rhs);
+//   swap(rhs);
+//
+//   return *this;
+// }
 
+//
+// member functions
+//
 void
 PluginFactoryBase::finishedConstruction()
 {
-  //have to wait until inheriting classes have finished their construction
-  // so that the virtual table has been filled in properly
-  PluginFactoryManager::get ()->addFactory (this);
+   PluginFactoryManager::get()->addFactory(this);
 }
-
-const std::string &
-PluginFactoryBase::category (void) const
-{ return m_tag; }
 
 void
-PluginFactoryBase::rebuild (void)
+PluginFactoryBase::newPlugin(const std::string& iName)
 {
-    PluginManager			*db = PluginManager::get ();
-    PluginManager::DirectoryIterator	dir;
-    ModuleCache::Iterator		module;
-    ModuleDescriptor			*cache;
-    unsigned				i;
-
-    // The modules cannot have infos already cached that we need to
-    // avoid recreating.  This is because the infos can be created
-    // only in one of two ways, and in either case the factory knows
-    // *and* has already cleared out those infos in the derived
-    // rebuild() before invoking us.  Infos restored from the cache
-    // are managed by the factory, and thus the known and already
-    // deleted.  When infos are created via the factory's describe()
-    // method, the factory must already exist and thus the infos are
-    // automatically registered (and thus already deleted).  The
-    // latter is because the factory must be in the same library as the
-    // one invoking describe(), or one of its dependents; either way
-    // since the factory is a global object, it has been constructed (the
-    // query happens after global constructors).
-    //
-    // Which brings us back to the point: there cannot be infos we
-    // care about at this point.  As we start, the derived factory has no
-    // infos (guaranteed by derived rebuild()), so the only infos that
-    // exist are those we create here below.
-    for (dir = db->beginDirectories (); dir != db->endDirectories (); ++dir)
-	for (module = (*dir)->begin (); module != (*dir)->end (); ++module)
-	    for (cache=(*module)->cacheRoot(), i=0; i < cache->children(); ++i)
-		if (cache->child (i)->token (0) == category ())
-		    restore (*module, cache->child (i));
+  PluginInfo info;
+  info.loadable_=PluginManager::loadingFile();
+  info.name_=iName;
+  newPluginAdded_(category(),info);
 }
+//
+// const member functions
+//
 
-} // namespace edmplugin
+//
+// static member functions
+//
+}

@@ -1,1176 +1,219 @@
-#ifndef PLUGIN_MANAGER_PLUGIN_DB_VIEW_H
-# define PLUGIN_MANAGER_PLUGIN_DB_VIEW_H
+#ifndef FWCore_PluginManager_PluginFactory_h
+#define FWCore_PluginManager_PluginFactory_h
+// -*- C++ -*-
+//
+// Package:     PluginManager
+// Class  :     PluginFactory
+// 
+/**\class PluginFactory PluginFactory.h FWCore/PluginManager/interface/PluginFactory.h
 
-//<<<<<< INCLUDES                                                       >>>>>>
+ Description: Public interface for loading a plugin
 
-# include "FWCore/PluginManager/interface/MapUniqueIterator.h"
-# include "FWCore/PluginManager/interface/PluginFactoryBase.h"
-# include "FWCore/PluginManager/interface/ModuleDef.h"
-# include "FWCore/PluginManager/interface/Module.h"
-# include "FWCore/PluginManager/interface/DebugAids.h"
-# include <map>
+ Usage:
+    <usage>
+
+*/
+//
+// Original Author:  Chris Jones
+//         Created:  Thu Apr  5 12:10:23 EDT 2007
+// $Id$
+//
+
+// system include files
+#include <map>
+#include <vector>
+
+// user include files
+#include "FWCore/PluginManager/interface/PluginFactoryBase.h"
+#include "FWCore/Utilities/interface/Exception.h"
+#include "FWCore/PluginManager/interface/PluginManager.h"
+// forward declarations
 
 namespace edmplugin {
-//<<<<<< PUBLIC DEFINES                                                 >>>>>>
-//<<<<<< PUBLIC CONSTANTS                                               >>>>>>
-//<<<<<< PUBLIC TYPES                                                   >>>>>>
-
-/** Plug-in factory base class.
-
-    The plug-in manager is used through factories derived from this
-    class.  Each factory represents a category of objects that can be
-    created as a plug-in object.  The plug-in manager is in some sense
-    merely a set of factories.  The clients of a factory of type T can
-    create instances derived from T, just as in any factory.  Only
-    with the plug-in manager the implementations for those classes can
-    be loaded on demand from a shared library behind the scenes.
-    Clients of the factory are thus decoupled from the physical
-    decomposition of the application.
-
-    To define a new plug-in category for some type T, with constructor
-    arguments A and B, inherit your factory from PluginFactory<T *(A,
-    B)>.  This base class provides all the functionality for
-    integration to #PluginManager, managing modules and available
-    plug-in objects, iteration over registered plug-ins and the @c
-    create() methods to instantiate them.  Please refer to the
-    separate how-to documentation for a more detailed example.
-
-    The plug-in manager restricts in no way the types of objects that
-    can be created through the factories.  It is possible (though not
-    very meaningful) to create instances of the C++ scalar types like
-    @c int via the plug-in mechanism.
-
-    Each factory is a globally constructed singleton object like the
-    plug-in manager itself (and not a pointer, nor a function-local
-    static object).  This strategy is required because shared-library
-    loading is an application-global operation and to ensure that the
-    factory is always valid if it exists: the factories may come and
-    go several times during a single program execution if modules are
-    loaded and unloaded, for example during module queries by the
-    caching mechanism.  Factories do not have an abstract interface
-    unlike plug-ins, they are normal types that are always accessed
-    through a static interface.  Clients using a particular factory
-    should just use it directly without intermediaries.  It makes no
-    sense to try to abstract the factory away; an attempt to do so is
-    most likely a misunderstanding.  */
-template <class Proto> class PluginFactory;
-template <class Proto> class PluginFactoryImpl;
-template <class Proto> class PluginFactoryImplTypes;
-template <class Types> class PluginFactoryImplBase;
-
-//<<<<<< PUBLIC VARIABLES                                               >>>>>>
-//<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
-//<<<<<< CLASS DECLARATIONS                                             >>>>>>
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-// Specialisations of PluginInfo for various argument combinations.  Up
-// to three arguments are supported now.  Arbitrary many *could* be
-// supported, it's just a question of tedious work to make it happen.
-// (See boost absolute and total preprocessor abuse package for another
-// solution that scales up to 256 arguments -- it results in totally
-// incomprehensible code, both before and after expansion.)
-//
-// The PluginFactoryImplTypes defines helper types needed to implement
-// a particular plug-in factory kind.  The template argument is a
-// function prototype (return value and argument list), or just "void"
-// for factory that never creates anything, only loads modules.
-template <>
-class PluginFactoryImplTypes<void>
+  template< class T> class PluginFactory;
+  class DummyFriend;
+  
+template<class R>
+class PluginFactory<R * (void)> : public PluginFactoryBase
 {
-public:
-    class Info : public PluginInfo
-    {
-    public:
-	Info (Module *module, const std::string &name, const std::string &tag);
-	Info (Module *module, ModuleDescriptor *details, const std::string &tag);
-	~Info (void);
-    };
+      friend class DummyFriend;
+   public:
+      struct PMakerBase {
+        virtual R* create(void) const = 0;
+      };
+      template<class TPlug>
+      struct PMaker : public PMakerBase {
+        PMaker(const std::string& iName) {
+          PluginFactory<R*(void)>::get()->registerPMaker(this,iName);
+        }
+        virtual R* create() const {
+          return new TPlug();
+        }
+      };
+      typedef std::vector<std::pair<PMakerBase*, std::string> > PMakers;
+      typedef std::map<std::string, PMakers > Plugins;
+
+      // ---------- const member functions ---------------------
+      virtual std::vector<PluginInfo> available() const {
+        std::vector<PluginInfo> returnValue;
+        returnValue.reserve(m_plugins.size());
+        fillAvailable(m_plugins.begin(),
+                      m_plugins.end(),
+                      returnValue);
+        return returnValue;
+      }
+      virtual const std::string& category() const ;
+      
+      R* create(const std::string& iName) const {
+        return PluginFactoryBase::findPMaker(iName,m_plugins)->second.front().first->create();
+      }
+      // ---------- static member functions --------------------
+
+      static PluginFactory<R*(void)>* get();
+      // ---------- member functions ---------------------------
+      void registerPMaker(PMakerBase* iPMaker, const std::string& iName) {
+        m_plugins[iName].push_back(std::pair<PMakerBase*,std::string>(iPMaker,PluginManager::loadingFile()));
+        newPlugin(iName);
+      }
+
+   private:
+      PluginFactory() {
+        finishedConstruction();
+      }
+      PluginFactory(const PluginFactory&); // stop default
+
+      const PluginFactory& operator=(const PluginFactory&); // stop default
+
+      // ---------- member data --------------------------------
+      Plugins m_plugins;
+
 };
 
-template <class R>
-class PluginFactoryImplTypes<R * (void)>
+template<class R, class Arg>
+class PluginFactory<R * (Arg)> : public PluginFactoryBase
 {
+  friend class DummyFriend;
 public:
-    typedef R Object;
-    class Factory {
-    public:
-	virtual ~Factory (void);
-	virtual R *create (void) = 0;
+  struct PMakerBase {
+    virtual R* create(Arg) const = 0;
+  };
+  template<class TPlug>
+    struct PMaker : public PMakerBase {
+      PMaker(const std::string& iName) {
+        PluginFactory<R*(Arg)>::get()->registerPMaker(this,iName);
+      }
+      virtual R* create(Arg iArg) const {
+        return new TPlug(iArg);
+      }
     };
-
-    template <class T> class AutoFactory : public Factory
-    {
-    public:
-	virtual R *create (void);
-    };
-
-    class Info : public PluginInfo
-    {
-    public:
-	Info (Module *module, const std::string &name, const std::string &tag);
-	Info (Module *module, ModuleDescriptor *details, const std::string &tag);
-	~Info (void);
-
-	R *		create (void);
-	void		attach (Factory *factory);
-	virtual void	detach (void);
-	
-
-    private:
-	Factory *	factory (void) const;
-	Factory		*m_factory;	/*< Factory for creating instances
-					    of this type, set when the
-					    module is attached.  */
-    };
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1>
-class PluginFactoryImplTypes<R * (T1)>
-{
-public:
-    typedef R Object;
-    class Factory {
-    public:
-	virtual ~Factory (void);
-	virtual R *create (T1 a1) = 0;
-    };
-
-    template <class T> class AutoFactory : public Factory
-    {
-    public:
-	virtual R *create (T1 a1);
-    };
-
-    class Info : public PluginInfo
-    {
-    public:
-	Info (Module *module, const std::string &name, const std::string &tag);
-	Info (Module *module, ModuleDescriptor *details, const std::string &tag);
-	~Info (void);
-
-	R *		create (T1 a1);
-	void		attach (Factory *factory);
-	virtual void	detach (void);
-
-    private:
-	Factory *	factory (void) const;
-	Factory		*m_factory;	/*< Factory for creating instances
-					    of this type, set when the
-					    module is attached.  */
-    };
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2>
-class PluginFactoryImplTypes<R * (T1, T2)>
-{
-public:
-    typedef R Object;
-    class Factory {
-    public:
-	virtual ~Factory (void);
-	virtual R *create (T1 a1, T2 a2) = 0;
-    };
-
-    template <class T> class AutoFactory : public Factory
-    {
-    public:
-	virtual R *create (T1 a1, T2 a2);
-    };
-
-    class Info : public PluginInfo
-    {
-    public:
-	Info (Module *module, const std::string &name, const std::string &tag);
-	Info (Module *module, ModuleDescriptor *details, const std::string &tag);
-	~Info (void);
-
-	R *		create (T1 a1, T2 a2);
-	void		attach (Factory *factory);
-	virtual void	detach (void);
-
-    private:
-	Factory *	factory (void) const;
-	Factory		*m_factory;	/*< Factory for creating instances
-					    of this type, set when the
-					    module is attached.  */
-    };
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3>
-class PluginFactoryImplTypes<R * (T1, T2, T3)>
-{
-public:
-    typedef R Object;
-    class Factory {
-    public:
-	virtual ~Factory (void);
-	virtual R *create (T1 a1, T2 a2, T3 a3) = 0;
-    };
-
-    template <class T> class AutoFactory : public Factory
-    {
-    public:
-	virtual R *create (T1 a1, T2 a2, T3 a3);
-    };
-
-    class Info : public PluginInfo
-    {
-    public:
-	Info (Module *module, const std::string &name, const std::string &tag);
-	Info (Module *module, ModuleDescriptor *details, const std::string &tag);
-	~Info (void);
-
-	R *		create (T1 a1, T2 a2, T3 a3);
-	void		attach (Factory *factory);
-	virtual void	detach (void);
-
-    private:
-	Factory *	factory (void) const;
-	Factory		*m_factory;	/*< Factory for creating instances
-					    of this type, set when the
-					    module is attached.  */
-    };
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3, class T4>
-class PluginFactoryImplTypes<R * (T1, T2, T3, T4)>
-{
-public:
-    typedef R Object;
-    class Factory {
-    public:
-	virtual ~Factory (void);
-	virtual R *create (T1 a1, T2 a2, T3 a3, T4 a4) = 0;
-    };
-
-    template <class T> class AutoFactory : public Factory
-    {
-    public:
-	virtual R *create (T1 a1, T2 a2, T3 a3, T4 a4);
-    };
-
-    class Info : public PluginInfo
-    {
-    public:
-	Info (Module *module, const std::string &name, const std::string &tag);
-	Info (Module *module, ModuleDescriptor *details, const std::string &tag);
-	~Info (void);
-
-	R *		create (T1 a1, T2 a2, T3 a3, T4 a4);
-	void		attach (Factory *factory);
-	virtual void	detach (void);
-
-    private:
-	Factory *	factory (void) const;
-	Factory		*m_factory;	/*< Factory for creating instances
-					    of this type, set when the
-					    module is attached.  */
-    };
-};
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-// Definition on the main factory implementation base class.  This
-// class defines all the utilities for maintaining info objects,
-// including their declarations from modules, but includes no support
-// for creating objects or accessing object factories.
-
-template <class Types>
-class PluginFactoryImplBase : public PluginFactoryBase
-{
-public:
-    /** The info type.  */
-    typedef typename Types::Info		Info;
-
-    /** Info table type.  Keyed by the plug-in registration name.  The table
-	is always built such that modules earlier in the module search path
-	occur earlier in this table; the first interesting info item to use
-	is the first of the multiple entries.  */
-    typedef std::multimap<std::string, Info *>	Map;
-
-    /** Type of the element in the info table.  */
-    typedef typename Map::value_type		MapValue;
-
-    /** Iterator over module data, filters out duplicate entries if
-        the same plug-in is available from multiple modules, such as
-        released and privately re-built modules. */
-    typedef MapUniqueIterator<Map>		Iterator;
-
-    PluginFactoryImplBase (const std::string &tag);
-    ~PluginFactoryImplBase (void);
-
-    Iterator		begin (void) const;
-    Iterator		end (void) const;
-    Iterator		locate (const std::string &name) const;
-    Info *		info (const std::string &name) const;
-
-    virtual void	declare (ModuleDef *def, std::string name);
-
-    // Notifications from PluginManager.
-    virtual void	rebuild (void);
-    virtual void	restore (Module *module, ModuleDescriptor *info);
-    virtual void	addInfo (PluginInfo *info);
-    virtual void	removeInfo (PluginInfo *info);
-
+  typedef std::vector<std::pair<PMakerBase*, std::string> > PMakers;
+  typedef std::map<std::string, PMakers > Plugins;
+  
+  // ---------- const member functions ---------------------
+  virtual std::vector<PluginInfo> available() const {
+    std::vector<PluginInfo> returnValue;
+    returnValue.reserve(m_plugins.size());
+    fillAvailable(m_plugins.begin(),
+                  m_plugins.end(),
+                  returnValue);
+    return returnValue;
+  }
+  virtual const std::string& category() const ;
+  
+  R* create(const std::string& iName, Arg iArg) const {
+    return PluginFactoryBase::findPMaker(iName,m_plugins)->second.front().first->create(iArg);
+  }
+  // ---------- static member functions --------------------
+  
+  static PluginFactory<R*(Arg)>* get();
+  // ---------- member functions ---------------------------
+  void registerPMaker(PMakerBase* iPMaker, const std::string& iName) {
+    m_plugins[iName].push_back(std::pair<PMakerBase*,std::string>(iPMaker,PluginManager::loadingFile()));
+    newPlugin(iName);
+  }
+  
 private:
-    Map			m_map;
+    PluginFactory() {
+      finishedConstruction();
+    }
+  PluginFactory(const PluginFactory&); // stop default
+  
+  const PluginFactory& operator=(const PluginFactory&); // stop default
+  
+  // ---------- member data --------------------------------
+  Plugins m_plugins;
+  
 };
 
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-// Intermediate implementation base class for factories that actually
-// instantiate objects.  Adds factories atop PluginFactoryImplBase.
-
-template <class Proto>
-class PluginFactoryImpl
-    : public PluginFactoryImplBase< PluginFactoryImplTypes<Proto> >
+template<class R, class Arg1, class Arg2>
+class PluginFactory<R * (Arg1, Arg2)> : public PluginFactoryBase
 {
+  friend class DummyFriend;
 public:
-    /** Alias type definition helper for more convenient access.  */
-    typedef PluginFactoryImplTypes<Proto>	Types;
-
-    /** The object we create.  */
-    typedef typename Types::Object		Object;
-
-    /** The basic factory type. */
-    typedef typename Types::Factory		Factory;
-
-    /** The info type.  */
-    typedef typename Types::Info		Info;
-
-    PluginFactoryImpl (const std::string &name);
-
-    virtual void	installFactory (ModuleDef *def,
-					std::string name,
-					Factory *factory);
-};
-
-//////////////////////////////////////////////////////////////////////
-// Custom specialisation for "void", i.e. no factory.
-
-template <>
-class PluginFactoryImpl<void>
-    : public PluginFactoryImplBase< PluginFactoryImplTypes<void> >
-{
-public:
-    typedef PluginFactoryImplTypes<void>	Types;
-
-    PluginFactoryImpl (const std::string &name);
-};
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-// Final client-visible factory base classes, specialised for various
-// constructor argument types.  These add the actual load()/create()
-// method signatures and thus have a specialisation for every possible
-// number of arguments (currently zero to three; see above for comments
-// on why this is not expanded to more arguments).
-
-template <>
-class PluginFactory<void> : public PluginFactoryImpl<void>
-{
-public:
-    PluginFactory (const std::string &name);
-
-    virtual void	load (Iterator info) const;
-    virtual void	load (const std::string &name) const;
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R>
-class PluginFactory<R * (void)> : public PluginFactoryImpl<R * (void)>
-{
- public:
-    typedef typename PluginFactoryImpl<R * (void)>::Iterator Iterator;
-    PluginFactory (const std::string &name);
-
-    virtual R *		create (Iterator info) const;
-    virtual R *		create (const std::string &name) const;
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1>
-class PluginFactory<R * (T1)> : public PluginFactoryImpl<R * (T1)>
-{
- public:
-    typedef typename PluginFactoryImpl<R * (T1)>::Iterator Iterator;
-    PluginFactory (const std::string &name);
-
-    virtual R *		create (const std::string &name, T1 a1) const;
-    virtual R *		create (Iterator item, T1 a1) const;
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2>
-class PluginFactory<R * (T1, T2)> : public PluginFactoryImpl<R * (T1, T2)>
-{
- public:
-    typedef typename PluginFactoryImpl<R * (T1, T2)>::Iterator Iterator;
-    PluginFactory (const std::string &name);
-
-    virtual R *		create (const std::string &name, T1 a1, T2 a2) const;
-    virtual R *		create (Iterator item, T1 a1, T2 a2) const;
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3>
-class PluginFactory<R * (T1, T2, T3)> : public PluginFactoryImpl<R * (T1, T2, T3)>
-{
- public:
-    typedef typename PluginFactoryImpl<R * (T1, T2, T3)>::Iterator Iterator;
-    PluginFactory (const std::string &name);
-
-    virtual R *		create (const std::string &name, T1 a1, T2 a2, T3 a3) const;
-    virtual R *		create (Iterator item, T1 a1, T2 a2, T3 a3) const;
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3, class T4>
-class PluginFactory<R * (T1, T2, T3, T4)> : public PluginFactoryImpl<R * (T1, T2, T3, T4)>
-{
- public:
-    typedef typename PluginFactoryImpl<R * (T1, T2, T3, T4)>::Iterator Iterator;
-    PluginFactory (const std::string &name);
-
-    virtual R *		create (const std::string &name, T1 a1, T2 a2, T3 a3, T4 a4) const;
-    virtual R *		create (Iterator item, T1 a1, T2 a2, T3 a3, T4 a4) const;
-};
-
-//////////////////////////////////////////////////////////////////////
-template <class I>
-class PluginFactory : public PluginFactoryBase
-{
-public:
-    typedef I					Info;
-
-    typedef typename I::Factory			Factory;
-
-    typedef std::multimap<std::string, Info *>	Map;
-
-    typedef typename Map::value_type		MapValue;
- 
-    typedef MapUniqueIterator<Map>		Iterator;
-
-    PluginFactory (const std::string &tag);
-    ~PluginFactory (void);
-
-    Iterator		begin (void) const;
-    Iterator		end (void) const;
-    Iterator		locate (const std::string &name) const;
-    Info *		info (const std::string &name) const;
-
-    virtual void	declare (ModuleDef *def, std::string name);
-    virtual void	installFactory (ModuleDef *def,
-					std::string name,
-					Factory *factory);
-
-    virtual void	rebuild (void);
-    virtual void	restore (Module *module, ModuleDescriptor *info);
-    virtual void	addInfo (PluginInfo *info);
-    virtual void	removeInfo (PluginInfo *info);
-
+  struct PMakerBase {
+    virtual R* create(Arg1, Arg2) const = 0;
+  };
+  template<class TPlug>
+    struct PMaker : public PMakerBase {
+      PMaker(const std::string& iName) {
+        PluginFactory<R*(Arg1,Arg2)>::get()->registerPMaker(this,iName);
+      }
+      virtual R* create(Arg1 iArg1, Arg2 iArg2) const {
+        return new TPlug(iArg1, iArg2);
+      }
+    };
+  typedef std::vector<std::pair<PMakerBase*, std::string> > PMakers;
+  typedef std::map<std::string, PMakers > Plugins;
+  
+  // ---------- const member functions ---------------------
+  virtual std::vector<PluginInfo> available() const {
+    std::vector<PluginInfo> returnValue;
+    returnValue.reserve(m_plugins.size());
+    fillAvailable(m_plugins.begin(),
+                  m_plugins.end(),
+                  returnValue);
+    return returnValue;
+  }
+  virtual const std::string& category() const ;
+  
+  R* create(const std::string& iName, Arg1 iArg1, Arg2 iArg2) const {
+    return PluginFactoryBase::findPMaker(iName,m_plugins)->second.front().first->create(iArg1, iArg2);
+  }
+  // ---------- static member functions --------------------
+  
+  static PluginFactory<R*(Arg1,Arg2)>* get();
+  // ---------- member functions ---------------------------
+  void registerPMaker(PMakerBase* iPMaker, const std::string& iName) {
+    m_plugins[iName].push_back(std::pair<PMakerBase*,std::string>(iPMaker,PluginManager::loadingFile()));
+    newPlugin(iName);
+  }
+  
 private:
-    Map			m_map;
+    PluginFactory() {
+      finishedConstruction();
+    }
+  PluginFactory(const PluginFactory&); // stop default
+  
+  const PluginFactory& operator=(const PluginFactory&); // stop default
+  
+  // ---------- member data --------------------------------
+  Plugins m_plugins;
 };
 
-//<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
-//<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-/** Construct a new plug-in factory.  Derived class should pass the
-    key by which items cached by this category are identified in the
-    plug-in manager cache.  It should be unique across the entire
-    software system, so if you provide a library, please make an
-    effort to pick a suitably unique tag label. */
-template <class Types>
-inline
-PluginFactoryImplBase<Types>::PluginFactoryImplBase (const std::string &tag)
-    : PluginFactoryBase (tag)
-{
-    ASSERT (! tag.empty ());
-    finishedConstruction();
-    //rebuild ();
 }
-
-/** Destroy the factory.  */
-template <class Types>
-inline
-PluginFactoryImplBase<Types>::~PluginFactoryImplBase (void)
-{
-    // Remove all my infos.
-    while (! m_map.empty ())
-	delete m_map.begin ()->second;
-}
-
-template <class Types>
-inline typename PluginFactoryImplBase<Types>::Iterator
-PluginFactoryImplBase<Types>::begin (void) const
-{ return Iterator (m_map.begin (), &m_map); }
-
-template <class Types>
-inline typename PluginFactoryImplBase<Types>::Iterator
-PluginFactoryImplBase<Types>::end (void) const
-{ return Iterator (m_map.end (), &m_map); }
-
-template <class Types>
-inline typename PluginFactoryImplBase<Types>::Iterator
-PluginFactoryImplBase<Types>::locate (const std::string &name) const
-{ return Iterator (m_map.find (name), &m_map); }
-
-template <class Types>
-inline typename PluginFactoryImplBase<Types>::Info *
-PluginFactoryImplBase<Types>::info (const std::string &name) const
-{ Iterator pos (locate (name)); return pos != end () ? *pos : 0; }
-
-template <class Types>
-inline void
-PluginFactoryImplBase<Types>::declare (ModuleDef *def, std::string name)
-{
-    // This will eventually come back to us, see comments in add().
-    ASSERT (def);
-    ASSERT (def->module ());
-    ASSERT (! name.empty ());
-    new Info (def->module (), name, category ());
-}
-
-template <class Types>
-inline void
-PluginFactoryImplBase<Types>::rebuild (void)
-{
-    // First remove all my infos
-    while (! m_map.empty ())
-	delete m_map.begin ()->second;
-
-    // And now regenerate them from cache contents
-    PluginFactoryBase::rebuild ();
-}
-
-template <class Types>
-inline void
-PluginFactoryImplBase<Types>::restore (Module *module, ModuleDescriptor *info)
-{
-    // The info item registers itself in the module on creation,
-    // causing PluginManager to be notified, and us getting notified
-    // again via addInfo() below.  On exit the info item already
-    // exists in our map.
-    new Info (module, info, category ());
-}
-
-template <class Types>
-inline void
-PluginFactoryImplBase<Types>::addInfo (PluginInfo *info)
-{
-    // We insert entries in a multi-map because similar entries might
-    // get inserted from multiple modules.  When modules are removed
-    // we still have a list of previous choices.  The infos are used
-    // in the order inserted, relying on the knowledge that PluginManager
-    // always processes modules in preference order, i.e. first those
-    // earlier in the search path, putting them first on our map's
-    // list of values.
-    ASSERT (dynamic_cast<Info *> (info));
-    m_map.insert (MapValue (info->name (), static_cast<Info *> (info)));
-}
-
-template <class Types>
-inline void
-PluginFactoryImplBase<Types>::removeInfo (PluginInfo *info)
-{
-    // Remove the info from the appropriate position.
-    typename Map::iterator pos = m_map.find (info->name ());
-    while (pos != m_map.end ()
-	   && pos->first == info->name ()
-	   && pos->second != info)
-	++pos;
-
-    ASSERT (pos != m_map.end ());
-    ASSERT (pos->second == info);
-    m_map.erase (pos);
-}
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-template <class Proto>
-inline
-PluginFactoryImpl<Proto>::PluginFactoryImpl (const std::string &tag)
-    : PluginFactoryImplBase<Types> (tag)
-{}
-
-template <class Proto>
-inline void
-PluginFactoryImpl<Proto>::installFactory (ModuleDef *def,
-					  std::string name,
-					  Factory *factory)
-{
-    ASSERT (def);
-
-    Info *info = this->info (name);
-
-    ASSERT (info);
-    ASSERT (info->module ());
-    ASSERT (info->module () == def->module ());
-    ASSERT (! info->name ().empty ());
-    ASSERT (info->name () == name);
-    ASSERT (factory);
-
-    info->attach (factory);
-}
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-inline
-PluginFactoryImpl<void>::PluginFactoryImpl (const std::string &tag)
-    : PluginFactoryImplBase<Types> (tag)
-{}
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-inline
-PluginFactory<void>::PluginFactory (const std::string &tag)
-    : PluginFactoryImpl<void> (tag)
-{}
-
-inline void
-PluginFactory<void>::load (Iterator info) const
-{ if (info != this->end ()) (*info)->module ()->attach (); }
-
-inline void
-PluginFactory<void>::load (const std::string &name) const
-{ load (this->locate (name)); }
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-template <class R>
-inline
-PluginFactory<R * (void)>::PluginFactory (const std::string &tag)
-    : PluginFactoryImpl<R * (void)> (tag)
-{}
-
-template <class R>
-inline R *
-PluginFactory<R * (void)>::create (Iterator info) const
-{ return info == this->end () ? 0 : (*info)->create (); }
-
-template <class R>
-inline R *
-PluginFactory<R * (void)>::create (const std::string &name) const
-{ return create (this->locate (name)); }
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1>
-inline
-PluginFactory<R * (T1)>::PluginFactory (const std::string &tag)
-    : PluginFactoryImpl<R * (T1)> (tag)
-{}
-
-template <class R, class T1>
-inline R *
-PluginFactory<R * (T1)>::create (Iterator info, T1 a1) const
-{ return info == this->end () ? 0 : (*info)->create (a1); }
-
-template <class R, class T1>
-inline R *
-PluginFactory<R * (T1)>::create (const std::string &name, T1 a1) const
-{ return create (this->locate (name), a1); }
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2>
-inline
-PluginFactory<R * (T1, T2)>::PluginFactory (const std::string &tag)
-    : PluginFactoryImpl<R * (T1, T2)> (tag)
-{}
-
-template <class R, class T1, class T2>
-inline R *
-PluginFactory<R * (T1, T2)>::create (Iterator info, T1 a1, T2 a2) const
-{ return info == this->end () ? 0 : (*info)->create (a1, a2); }
-
-template <class R, class T1, class T2>
-inline R *
-PluginFactory<R * (T1, T2)>::create (const std::string &name, T1 a1, T2 a2) const
-{ return create (this->locate (name), a1, a2); }
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3>
-inline
-PluginFactory<R * (T1, T2, T3)>::PluginFactory (const std::string &tag)
-    : PluginFactoryImpl<R * (T1, T2, T3)> (tag)
-{}
-
-template <class R, class T1, class T2, class T3>
-inline R *
-PluginFactory<R * (T1, T2, T3)>::create (Iterator info, T1 a1, T2 a2, T3 a3) const
-{ return info == this->end () ? 0 : (*info)->create (a1, a2, a3); }
-
-template <class R, class T1, class T2, class T3>
-inline R *
-PluginFactory<R * (T1, T2, T3)>::create (const std::string &name, T1 a1, T2 a2, T3 a3) const
-{ return create (this->locate (name), a1, a2, a3); }
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3, class T4>
-inline
-PluginFactory<R * (T1, T2, T3, T4)>::PluginFactory (const std::string &tag)
-    : PluginFactoryImpl<R * (T1, T2, T3, T4)> (tag)
-{}
-
-template <class R, class T1, class T2, class T3, class T4>
-inline R *
-PluginFactory<R * (T1, T2, T3, T4)>::create (Iterator info, T1 a1, T2 a2, T3 a3, T4 a4) const
-{ return info == this->end () ? 0 : (*info)->create (a1, a2, a3, a4); }
-
-template <class R, class T1, class T2, class T3, class T4>
-inline R *
-PluginFactory<R * (T1, T2, T3, T4)>::create (const std::string &name, T1 a1, T2 a2, T3 a3, T4 a4) const
-{ return create (this->locate (name), a1, a2, a3, a4); }
-
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
-inline
-PluginFactoryImplTypes<void>::Info::Info (Module *module,
-					  const std::string &name,
-					  const std::string &tag)
-    : PluginInfo (module, name, tag)
-{ finish (true); }
-
-inline
-PluginFactoryImplTypes<void>::Info::Info (Module *module,
-					  ModuleDescriptor *details,
-					  const std::string &tag)
-    : PluginInfo (module, details->token (1), tag)
-{ ASSERT (details->tokens () == 2); finish (false); }
-
-inline
-PluginFactoryImplTypes<void>::Info::~Info (void)
-{ detach (); }
-
-//////////////////////////////////////////////////////////////////////
-template <class R>
-inline
-PluginFactoryImplTypes<R * (void)>::Factory::~Factory (void)
-{}
-
-template <class R>
-template <class T>
-inline R *
-PluginFactoryImplTypes<R * (void)>::AutoFactory<T>::create (void)
-{ return new T; }
-
-template <class R>
-inline
-PluginFactoryImplTypes<R * (void)>::Info::Info (Module *module,
-						const std::string &name,
-						const std::string &tag)
-    : PluginInfo (module, name, tag),
-      m_factory (0)
-{ finish (true); }
-
-template <class R>
-inline
-PluginFactoryImplTypes<R * (void)>::Info::Info (Module *module,
-						ModuleDescriptor *details,
-						const std::string &tag)
-    : PluginInfo (module, details->token (1), tag),
-      m_factory (0)
-{ ASSERT (details->tokens () == 2); finish (false); }
-
-template <class R>
-inline
-PluginFactoryImplTypes<R * (void)>::Info::~Info (void)
-{ detach (); }
-
-template <class R>
-inline R *
-PluginFactoryImplTypes<R * (void)>::Info::create (void)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    return factory ()->create ();
-}
-
-template <class R>
-inline void
-PluginFactoryImplTypes<R * (void)>::Info::attach (Factory *factory)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    ASSERT (! m_factory);
-    ASSERT (factory); 
-    m_factory = factory;
-}
-
-template <class R>
-inline void
-PluginFactoryImplTypes<R * (void)>::Info::detach (void)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    delete m_factory;
-    m_factory = 0;
-}
-
-template <class R>
-inline typename PluginFactoryImplTypes<R * (void)>::Factory *
-PluginFactoryImplTypes<R * (void)>::Info::factory (void) const
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-
-    if (! m_factory)
-	module ()->attach ();
-
-    if (! m_factory)
-	noFactory ();
-
-    return m_factory;
-}
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1>
-inline
-PluginFactoryImplTypes<R * (T1)>::Factory::~Factory (void)
-{}
-
-template <class R, class T1>
-template <class T>
-inline R *
-PluginFactoryImplTypes<R * (T1)>::AutoFactory<T>::create (T1 a1)
-{ return new T (a1); }
-
-template <class R, class T1>
-inline
-PluginFactoryImplTypes<R * (T1)>::Info::Info (Module *module,
-					      const std::string &name,
-					      const std::string &tag)
-    : PluginInfo (module, name, tag),
-      m_factory (0)
-{ finish (true); }
-
-template <class R, class T1>
-inline
-PluginFactoryImplTypes<R * (T1)>::Info::Info (Module *module,
-					      ModuleDescriptor *details,
-					      const std::string &tag)
-    : PluginInfo (module, details->token (1), tag),
-      m_factory (0)
-{ ASSERT (details->tokens () == 2); finish (false); }
-
-template <class R, class T1>
-inline
-PluginFactoryImplTypes<R * (T1)>::Info::~Info (void)
-{ detach (); }
-
-template <class R, class T1>
-inline R *
-PluginFactoryImplTypes<R * (T1)>::Info::create (T1 a1)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    return factory ()->create (a1);
-}
-
-template <class R, class T1>
-inline void
-PluginFactoryImplTypes<R * (T1)>::Info::attach (Factory *factory)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    ASSERT (! m_factory);
-    ASSERT (factory); 
-    m_factory = factory;
-}
-
-template <class R, class T1>
-inline void
-PluginFactoryImplTypes<R * (T1)>::Info::detach (void)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    delete m_factory;
-    m_factory = 0;
-}
-
-template <class R, class T1>
-inline typename PluginFactoryImplTypes<R * (T1)>::Factory *
-PluginFactoryImplTypes<R * (T1)>::Info::factory (void) const
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-
-    if (! m_factory)
-	module ()->attach ();
-
-    if (! m_factory)
-	noFactory ();
-
-    return m_factory;
-}
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2>
-inline
-PluginFactoryImplTypes<R * (T1, T2)>::Factory::~Factory (void)
-{}
-
-template <class R, class T1, class T2>
-template <class T>
-inline R *
-PluginFactoryImplTypes<R * (T1, T2)>::AutoFactory<T>::create (T1 a1, T2 a2)
-{ return new T (a1, a2); }
-
-template <class R, class T1, class T2>
-inline
-PluginFactoryImplTypes<R * (T1, T2)>::Info::Info (Module *module,
-						  const std::string &name,
-						  const std::string &tag)
-    : PluginInfo (module, name, tag),
-      m_factory (0)
-{ finish (true); }
-
-template <class R, class T1, class T2>
-inline
-PluginFactoryImplTypes<R * (T1, T2)>::Info::Info (Module *module,
-						  ModuleDescriptor *details,
-						  const std::string &tag)
-    : PluginInfo (module, details->token (1), tag),
-      m_factory (0)
-{ ASSERT (details->tokens () == 2); finish (false); }
-
-template <class R, class T1, class T2>
-inline
-PluginFactoryImplTypes<R * (T1, T2)>::Info::~Info (void)
-{ detach (); }
-
-template <class R, class T1, class T2>
-inline R *
-PluginFactoryImplTypes<R * (T1, T2)>::Info::create (T1 a1, T2 a2)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    return factory ()->create (a1, a2);
-}
-
-template <class R, class T1, class T2>
-inline void
-PluginFactoryImplTypes<R * (T1, T2)>::Info::attach (Factory *factory)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    ASSERT (! m_factory);
-    ASSERT (factory); 
-    m_factory = factory;
-}
-
-template <class R, class T1, class T2>
-inline void
-PluginFactoryImplTypes<R * (T1, T2)>::Info::detach (void)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    delete m_factory;
-    m_factory = 0;
-}
-
-template <class R, class T1, class T2>
-inline typename PluginFactoryImplTypes<R * (T1, T2)>::Factory *
-PluginFactoryImplTypes<R * (T1, T2)>::Info::factory (void) const
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-
-    if (! m_factory)
-	module ()->attach ();
-
-    if (! m_factory)
-	noFactory ();
-
-    return m_factory;
-}
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Factory::~Factory (void)
-{}
-
-template <class R, class T1, class T2, class T3>
-template <class T>
-inline R *
-PluginFactoryImplTypes<R * (T1, T2, T3)>::AutoFactory<T>::create (T1 a1, T2 a2, T3 a3)
-{ return new T (a1, a2, a3); }
-
-template <class R, class T1, class T2, class T3>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::Info (Module *module,
-						      const std::string &name,
-						      const std::string &tag)
-    : PluginInfo (module, name, tag),
-      m_factory (0)
-{ finish (true); }
-
-template <class R, class T1, class T2, class T3>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::Info (Module *module,
-						      ModuleDescriptor *details,
-						      const std::string &tag)
-    : PluginInfo (module, details->token (1), tag),
-      m_factory (0)
-{ ASSERT (details->tokens () == 2); finish (false); }
-
-template <class R, class T1, class T2, class T3>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::~Info (void)
-{ detach (); }
-
-template <class R, class T1, class T2, class T3>
-inline R *
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::create (T1 a1, T2 a2, T3 a3)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    return factory ()->create (a1, a2, a3);
-}
-
-template <class R, class T1, class T2, class T3>
-inline void
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::attach (Factory *factory)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    ASSERT (! m_factory);
-    ASSERT (factory); 
-    m_factory = factory;
-}
-
-template <class R, class T1, class T2, class T3>
-inline void
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::detach (void)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    delete m_factory;
-    m_factory = 0;
-}
-
-template <class R, class T1, class T2, class T3>
-inline typename PluginFactoryImplTypes<R * (T1, T2, T3)>::Factory *
-PluginFactoryImplTypes<R * (T1, T2, T3)>::Info::factory (void) const
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-
-    if (! m_factory)
-	module ()->attach ();
-
-    if (! m_factory)
-	noFactory ();
-
-    return m_factory;
-}
-
-//////////////////////////////////////////////////////////////////////
-template <class R, class T1, class T2, class T3, class T4>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Factory::~Factory (void)
-{}
-
-template <class R, class T1, class T2, class T3, class T4>
-template <class T>
-inline R *
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::AutoFactory<T>::create (T1 a1, T2 a2, T3 a3, T4 a4)
-{ return new T (a1, a2, a3, a4); }
-
-template <class R, class T1, class T2, class T3, class T4>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::Info (Module *module,
-							  const std::string &name,
-							  const std::string &tag)
-    : PluginInfo (module, name, tag),
-      m_factory (0)
-{ finish (true); }
-
-template <class R, class T1, class T2, class T3, class T4>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::Info (Module *module,
-							  ModuleDescriptor *details,
-							  const std::string &tag)
-    : PluginInfo (module, details->token (1), tag),
-      m_factory (0)
-{ ASSERT (details->tokens () == 2); finish (false); }
-
-template <class R, class T1, class T2, class T3, class T4>
-inline
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::~Info (void)
-{ detach (); }
-
-template <class R, class T1, class T2, class T3, class T4>
-inline R *
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::create (T1 a1, T2 a2, T3 a3, T4 a4)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    return factory ()->create (a1, a2, a3, a4);
-}
-
-template <class R, class T1, class T2, class T3, class T4>
-inline void
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::attach (Factory *factory)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    ASSERT (! m_factory);
-    ASSERT (factory); 
-    m_factory = factory;
-}
-
-template <class R, class T1, class T2, class T3, class T4>
-inline void
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::detach (void)
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-    delete m_factory;
-    m_factory = 0;
-}
-
-template <class R, class T1, class T2, class T3, class T4>
-inline typename PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Factory *
-PluginFactoryImplTypes<R * (T1, T2, T3, T4)>::Info::factory (void) const
-{
-    ASSERT (module ());
-    ASSERT (! name ().empty ());
-
-    if (! m_factory)
-	module ()->attach ();
-
-    if (! m_factory)
-	noFactory ();
-
-    return m_factory;
-}
-
-} // namespace edmplugin
-#endif // PLUGIN_MANAGER_PLUGIN_DB_VIEW_H
+#define EDM_REGISTER_PLUGINFACTORY(_factory_,_category_) \
+namespace edmplugin {\
+  template<> _factory_* _factory_::get() { static _factory_ s_instance; return &s_instance;}\
+  template<> const std::string& _factory_::category() const { static std::string s_cat(_category_);  return s_cat;} }
+#endif
+
+#define EDM_PLUGIN_SYM(x,y) EDM_PLUGIN_SYM2(x,y)
+#define EDM_PLUGIN_SYM2(x,y) x ## y
+
+#define DEFINE_EDM_PLUGIN(factory,type,name) \
+static factory::PMaker<type> EDM_PLUGIN_SYM(s_maker , __LINE__ ) (name)
+
+//for backwards compatiblity
+#if !defined(DEFINE_SEAL_MODULE)
+#define DEFINE_SEAL_MODULE() enum {dummy} s_ ## __LINE__
+#endif

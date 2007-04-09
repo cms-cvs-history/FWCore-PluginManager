@@ -1,73 +1,60 @@
-#ifndef SEAL_BASE_SHARED_LIBRARY_H
-# define SEAL_BASE_SHARED_LIBRARY_H
+#ifndef FWCore_PluginManager_SharedLibrary_h
+#define FWCore_PluginManager_SharedLibrary_h
+// -*- C++ -*-
+//
+// Package:     PluginManager
+// Class  :     SharedLibrary
+// 
+/**\class SharedLibrary SharedLibrary.h FWCore/PluginManager/interface/SharedLibrary.h
 
-//<<<<<< INCLUDES                                                       >>>>>>
+ Description: Handles the loading of a SharedLibrary
 
-# include "FWCore/PluginManager/interface/SharedLibraryError.h"
-//# //include "FWCore/PluginManager/interface/Callback.h"
-# include <string>
-# include <list>
-#include "sigc++/signal.h"
+ Usage:
+    <usage>
 
+*/
+//
+// Original Author:  Chris Jones
+//         Created:  Thu Apr  5 15:30:08 EDT 2007
+// $Id$
+//
+
+// system include files
+#include <boost/filesystem/path.hpp>
+
+// user include files
+
+// forward declarations
+namespace ROOT {
+  namespace Reflex {
+    class SharedLibrary;
+  }
+}
 namespace edmplugin {
-//<<<<<< PUBLIC DEFINES                                                 >>>>>>
-//<<<<<< PUBLIC CONSTANTS                                               >>>>>>
-//<<<<<< PUBLIC TYPES                                                   >>>>>>
-//<<<<<< PUBLIC VARIABLES                                               >>>>>>
-//<<<<<< PUBLIC FUNCTIONS                                               >>>>>>
-//<<<<<< CLASS DECLARATIONS                                             >>>>>>
-
-/** Shared library services.  */
 class SharedLibrary
 {
-public:
-    typedef void *		Data;
-    typedef void		(*Function) (void);
 
-    /** Information about a currently loaded shared library.  */
-    struct LibraryInfo
-    {
-	unsigned long		m_text_start;	//< Start of text segment
-	unsigned long		m_text_end;	//< End of text segment
-	unsigned long		m_data_start;	//< Start of data segment
-	unsigned long		m_data_end;	//< End of data segment
-	unsigned long		m_bss_start;	//< Start of common
-	unsigned long		m_bss_end;	//< End of common
-	const char		*m_filename;	//< Filename
-    };
+   public:
+      SharedLibrary(const boost::filesystem::path& iName);
+      ~SharedLibrary();
 
-    //typedef Callback1<const LibraryInfo &> InfoHandler;
-    typedef sigc::signal<void,const LibraryInfo&> InfoHandler;
-    
-    static std::string		path (void);
-    static void			path (const std::string &path);
-    static std::string		libname (const std::string &name);
-    static std::string		symname (const std::string &name);
+      // ---------- const member functions ---------------------
+      bool symbol(const std::string& iSymbolName, void* & iSymbol) const;
+      const boost::filesystem::path& path() const { return path_;}
 
-    static SharedLibrary *	self (void);
-    static SharedLibrary *	load (const std::string &name);
-    static void			loaded (const InfoHandler &handler);
+      // ---------- static member functions --------------------
 
-    void			release (void);
-    void			abandon (void);
+      // ---------- member functions ---------------------------
+      
+   private:
+      SharedLibrary(const SharedLibrary&); // stop default
 
-    Data			data (const std::string &name, bool mangle = true) const;
-    Function			function (const std::string &name, bool mangle = true) const;
+      const SharedLibrary& operator=(const SharedLibrary&); // stop default
 
-protected:
-    SharedLibrary (void *handle);
-    ~SharedLibrary (void);
-
-private:
-    void			*m_handle;
-
-    // undefined semantics
-    SharedLibrary (const SharedLibrary &);
-    SharedLibrary &operator= (const SharedLibrary &);
+      // ---------- member data --------------------------------
+      mutable ROOT::Reflex::SharedLibrary* library_;
+      boost::filesystem::path path_;
 };
 
-//<<<<<< INLINE PUBLIC FUNCTIONS                                        >>>>>>
-//<<<<<< INLINE MEMBER FUNCTIONS                                        >>>>>>
-
-} // namespace edmplugin
-#endif // SEAL_BASE_SHARED_LIBRARY_H
+}
+#endif
