@@ -16,7 +16,7 @@
 //
 // Original Author:  Chris Jones
 //         Created:  Thu Apr  5 12:10:23 EDT 2007
-// $Id$
+// $Id: PluginFactory.h,v 1.1.2.3 2007/04/09 18:46:49 chrjones Exp $
 //
 
 // system include files
@@ -214,6 +214,4 @@ namespace edmplugin {\
 static factory::PMaker<type> EDM_PLUGIN_SYM(s_maker , __LINE__ ) (name)
 
 //for backwards compatiblity
-#if !defined(DEFINE_SEAL_MODULE)
-#define DEFINE_SEAL_MODULE() enum {dummy} s_ ## __LINE__
-#endif
+#include "FWCore/PluginManager/interface/ModuleDef.h"
