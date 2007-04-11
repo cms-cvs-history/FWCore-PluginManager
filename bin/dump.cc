@@ -24,7 +24,7 @@ int main (int argc, char **argv)
       typedef edmplugin::PluginManager::CategoryToInfos CatToInfos;
 
       const CatToInfos& catToInfos = edmplugin::PluginManager::get()->categoryToInfos();
-      // map every module to its library.  Code copied from SealPluginDump
+      // map every module to its library.  Code copied from EdmPluginDump
       for (CatToInfos::const_iterator it = catToInfos.begin(), itEnd=catToInfos.end();
            it != itEnd; ++it)
       {

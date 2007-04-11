@@ -35,8 +35,8 @@ namespace edm {
 	  << "Presence Factory:\n"
 	  << "Cannot find presence type: "
 	  << presence_type << "\n"
-	  << "Perhaps the name is misspelled or is not a SEAL Plugin?\n"
-	  << "Try running SealPluginDump to obtain a list of available Plugins.";
+	  << "Perhaps the name is misspelled or is not a Plugin?\n"
+	  << "Try running EdmPluginDump to obtain a list of available Plugins.";
     }
 
     FDEBUG(1) << "PresenceFactory: created presence "
