@@ -16,7 +16,7 @@
 //
 // Original Author:  Chris Jones
 //         Created:  Thu Apr  5 12:10:23 EDT 2007
-// $Id: PluginFactory.h,v 1.1.2.4 2007/04/11 23:22:19 wmtan Exp $
+// $Id: PluginFactory.h,v 1.1.2.5 2007/04/12 00:00:24 chrjones Exp $
 //
 
 // system include files
@@ -205,8 +205,7 @@ private:
 namespace edmplugin {\
   template<> _factory_* _factory_::get() { static _factory_ s_instance; return &s_instance;}\
   template<> const std::string& _factory_::category() const { static std::string s_cat(_category_);  return s_cat;}\
-}\
-enum {dummy} s_ ## __LINE__
+}
 
 #endif
 
