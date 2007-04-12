@@ -8,7 +8,7 @@
 //
 // Original Author:  Chris Jones
 //         Created:  Fri Apr  6 12:36:24 EDT 2007
-// $Id$
+// $Id: PluginCapabilities.cc,v 1.1.2.3 2007/04/09 18:46:51 chrjones Exp $
 //
 
 // system include files
@@ -70,8 +70,9 @@ PluginCapabilities::tryToFind(const SharedLibrary& iLoadable)
   
   const char** names;
   int size;
-  reinterpret_cast<void (*)(const char**&,int&)>(sym)(names,size);
-  
+  //reinterpret_cast<void (*)(const char**&,int&)>(sym)(names,size);
+  ((void (*)(const char**&,int&))(sym))(names,size);
+
   for(int i=0; i < size; ++i) {
     std::string name(names[i]);
     classToLoadable_[name]=iLoadable.path();
