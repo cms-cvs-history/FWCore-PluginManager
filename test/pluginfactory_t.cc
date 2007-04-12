@@ -8,7 +8,7 @@
 //
 // Original Author:  Chris Jones
 //         Created:  Wed Apr  4 13:38:29 EDT 2007
-// $Id$
+// $Id: pluginfactory_t.cc,v 1.1.2.1 2007/04/09 18:46:51 chrjones Exp $
 //
 
 // system include files
@@ -41,8 +41,8 @@ namespace edmplugintest {
   struct Dummy: public DummyBase {};
 }
 
-typedef edmplugin::PluginFactory<edmplugintest::DummyBase*(void)> FactoryType ;
-EDM_REGISTER_PLUGINFACTORY(FactoryType,"Test Dummy");
+typedef edmplugin::PluginFactory<edmplugintest::DummyBase*(void)> FactoryType;
+EDM_REGISTER_PLUGINFACTORY(FactoryType,"Test Dummy")
 
 DEFINE_EDM_PLUGIN(FactoryType,edmplugintest::Dummy,"Dummy");
 
