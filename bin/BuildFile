@@ -1,8 +1,10 @@
 <bin name=EdmPluginDump file=dump.cc>
  <use name=boost>
+ <use name=boost_program_options> 
  <use name=FWCore/PluginManager>
 </bin>
 <bin name=EdmPluginRefresh file=refresh.cc>
  <use name=boost>
+ <use name=boost_program_options> 
  <use name=FWCore/PluginManager>
 </bin>
